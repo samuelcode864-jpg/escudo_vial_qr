@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { INITIAL_QRS, INITIAL_EMERGENCIES, INITIAL_REPORTS } from '../data/mockData';
 import { getDeviceLocation } from '../utils/geoUtils';
+import {
+  supabase,
+  isSupabaseConfigured,
+  mapQrFromDb,
+  mapQrToDb,
+  mapEmergencyFromDb,
+  mapEmergencyToDb,
+  mapReportFromDb,
+  mapReportToDb
+} from '../utils/supabaseClient';
 
 const AppContext = createContext(null);
 
@@ -119,56 +129,128 @@ export function AppProvider({ children }) {
     });
   }, []);
 
-  // Sincronización con el Servidor Central (/api/database) y tiempo real multi-dispositivo (SSE)
+  // Sincronización con Supabase (Nube en Tiempo Real) o Servidor Central Local (/api/database)
   useEffect(() => {
     let isMounted = true;
+    let evtSource = null;
+    let channel = null;
+    let sbChannel = null;
 
-    // 1. Cargar estado fresco del servidor al iniciar en cualquier dispositivo (PC o Móvil)
-    fetch('/api/database')
-      .then(res => res.json())
-      .then(db => {
-        if (!isMounted || !db) return;
-        if (Array.isArray(db.qrList) && db.qrList.length > 0) {
-          setQrList(db.qrList);
-          localStorage.setItem('ev_qr_list', JSON.stringify(db.qrList));
+    if (isSupabaseConfigured && supabase) {
+      // MODO NUBE: Supabase PostgreSQL + Realtime WebSockets
+      Promise.all([
+        supabase.from('qrs').select('*'),
+        supabase.from('emergencies').select('*').order('created_at', { ascending: false }),
+        supabase.from('reports').select('*').order('created_at', { ascending: false })
+      ]).then(([qrsRes, emgRes, repRes]) => {
+        if (!isMounted) return;
+        if (qrsRes.data && qrsRes.data.length > 0) {
+          const mappedQrs = qrsRes.data.map(mapQrFromDb);
+          setQrList(mappedQrs);
+          localStorage.setItem('ev_qr_list', JSON.stringify(mappedQrs));
         }
-        if (Array.isArray(db.emergencies)) {
-          setEmergencies(db.emergencies);
-          localStorage.setItem('ev_emergencies', JSON.stringify(db.emergencies));
+        if (emgRes.data) {
+          const mappedEmgs = emgRes.data.map(mapEmergencyFromDb);
+          setEmergencies(mappedEmgs);
+          localStorage.setItem('ev_emergencies', JSON.stringify(mappedEmgs));
         }
-        if (Array.isArray(db.reports)) {
-          setReports(db.reports);
-          localStorage.setItem('ev_reports', JSON.stringify(db.reports));
+        if (repRes.data) {
+          const mappedReps = repRes.data.map(mapReportFromDb);
+          setReports(mappedReps);
+          localStorage.setItem('ev_reports', JSON.stringify(mappedReps));
         }
-      })
-      .catch(() => {});
+      }).catch(err => {
+        console.warn("Error cargando datos de Supabase:", err);
+      });
 
-    // 2. Conectar a Stream SSE para recibir cambios instantáneos cuando cualquier móvil escanee o active un QR
-    let evtSource;
-    try {
-      evtSource = new EventSource('/api/database/stream');
-      evtSource.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload?.data) {
-            const { qrList: incomingQrs, emergencies: incomingEmgs, reports: incomingReps } = payload.data;
-            if (Array.isArray(incomingQrs)) setQrList(incomingQrs);
-            if (Array.isArray(incomingEmgs)) setEmergencies(incomingEmgs);
-            if (Array.isArray(incomingReps)) setReports(incomingReps);
-            if (payload.type === 'NEW_EMERGENCY') {
-              playEmergencyAudio();
-            }
+      // Suscripción a eventos Realtime de Supabase
+      sbChannel = supabase.channel('escudo_vial_cloud_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'emergencies' }, (payload) => {
+          if (!isMounted) return;
+          if (payload.eventType === 'INSERT') {
+            const newEmg = mapEmergencyFromDb(payload.new);
+            setEmergencies(prev => [newEmg, ...prev.filter(e => e.id !== newEmg.id)]);
+            setUnreadAlert(newEmg);
+            playEmergencyAudio();
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = mapEmergencyFromDb(payload.new);
+            setEmergencies(prev => prev.map(e => e.id === updated.id ? updated : e));
+          } else if (payload.eventType === 'DELETE') {
+            setEmergencies(prev => prev.filter(e => e.id !== payload.old.id));
           }
-        } catch {
-          // Ignorar parse error
-        }
-      };
-    } catch {
-      // Ignorar fallback
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'qrs' }, (payload) => {
+          if (!isMounted) return;
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updatedQr = mapQrFromDb(payload.new);
+            setQrList(prev => {
+              const idx = prev.findIndex(q => q.sku.toUpperCase() === updatedQr.sku.toUpperCase());
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = updatedQr;
+                return copy;
+              }
+              return [updatedQr, ...prev];
+            });
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, (payload) => {
+          if (!isMounted) return;
+          if (payload.eventType === 'INSERT') {
+            const rep = mapReportFromDb(payload.new);
+            setReports(prev => [rep, ...prev.filter(r => r.id !== rep.id)]);
+          } else if (payload.eventType === 'UPDATE') {
+            const rep = mapReportFromDb(payload.new);
+            setReports(prev => prev.map(r => r.id === rep.id ? rep : r));
+          }
+        })
+        .subscribe();
+    } else {
+      // MODO LOCAL / DESARROLLO: Cargar estado del servidor Vite Express mock
+      fetch('/api/database')
+        .then(res => res.json())
+        .then(db => {
+          if (!isMounted || !db) return;
+          if (Array.isArray(db.qrList) && db.qrList.length > 0) {
+            setQrList(db.qrList);
+            localStorage.setItem('ev_qr_list', JSON.stringify(db.qrList));
+          }
+          if (Array.isArray(db.emergencies)) {
+            setEmergencies(db.emergencies);
+            localStorage.setItem('ev_emergencies', JSON.stringify(db.emergencies));
+          }
+          if (Array.isArray(db.reports)) {
+            setReports(db.reports);
+            localStorage.setItem('ev_reports', JSON.stringify(db.reports));
+          }
+        })
+        .catch(() => {});
+
+      // Conectar a Stream SSE local
+      try {
+        evtSource = new EventSource('/api/database/stream');
+        evtSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload?.data) {
+              const { qrList: incomingQrs, emergencies: incomingEmgs, reports: incomingReps } = payload.data;
+              if (Array.isArray(incomingQrs)) setQrList(incomingQrs);
+              if (Array.isArray(incomingEmgs)) setEmergencies(incomingEmgs);
+              if (Array.isArray(incomingReps)) setReports(incomingReps);
+              if (payload.type === 'NEW_EMERGENCY') {
+                playEmergencyAudio();
+              }
+            }
+          } catch {
+            // Ignorar parse error
+          }
+        };
+      } catch {
+        // Ignorar fallback
+      }
     }
 
-    // 3. Sincronización entre pestañas en el mismo navegador (BroadcastChannel)
-    let channel;
+    // Sincronización entre pestañas en el mismo navegador (BroadcastChannel)
     try {
       channel = new BroadcastChannel('escudo_vial_sync');
       channel.onmessage = (event) => {
@@ -197,6 +279,7 @@ export function AppProvider({ children }) {
 
     return () => {
       isMounted = false;
+      if (sbChannel) supabase.removeChannel(sbChannel);
       if (evtSource) evtSource.close();
       if (channel) channel.close();
     };
@@ -252,6 +335,29 @@ export function AppProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, payload })
     }).catch(() => {});
+
+    // Sincronización transparente con Supabase en la Nube
+    if (isSupabaseConfigured && supabase) {
+      if (type === 'NEW_EMERGENCY' || type === 'UPDATE_EMERGENCY') {
+        const dbEmg = mapEmergencyToDb(payload);
+        if (dbEmg) supabase.from('emergencies').upsert(dbEmg).catch(e => console.warn('Supabase emg error:', e));
+      } else if (type === 'DELETE_EMERGENCY') {
+        supabase.from('emergencies').delete().eq('id', payload.id).catch(e => console.warn('Supabase del emg error:', e));
+      } else if (type === 'CLEAR_RESOLVED') {
+        supabase.from('emergencies').delete().eq('status', 'resuelto').catch(e => console.warn('Supabase clear error:', e));
+      } else if (type === 'UPDATE_QR') {
+        const dbQr = mapQrToDb(payload);
+        if (dbQr) supabase.from('qrs').upsert(dbQr).catch(e => console.warn('Supabase qr error:', e));
+      } else if (type === 'BATCH_QRS') {
+        if (Array.isArray(payload) && payload.length > 0) {
+          const dbQrs = payload.map(mapQrToDb);
+          supabase.from('qrs').upsert(dbQrs).catch(e => console.warn('Supabase batch qr error:', e));
+        }
+      } else if (type === 'NEW_REPORT') {
+        const dbRep = mapReportToDb(payload);
+        if (dbRep) supabase.from('reports').upsert(dbRep).catch(e => console.warn('Supabase rep error:', e));
+      }
+    }
   };
 
   const currentQr = qrList.find(q => q.sku.toUpperCase() === activeSku.toUpperCase()) || {
@@ -654,7 +760,8 @@ export function AppProvider({ children }) {
         generateNewQr,
         clearAllData,
         deleteEmergency,
-        clearResolvedEmergencies
+        clearResolvedEmergencies,
+        isSupabaseConfigured
       }}
     >
       {children}
