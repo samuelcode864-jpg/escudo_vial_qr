@@ -1,0 +1,58 @@
+{
+  "qrList": [
+    {
+      "sku": "EV8842VE",
+      "status": "active",
+      "category": "Auto",
+      "scansCount": 1,
+      "activatedAt": "2026-09-25T16:00:00.000Z",
+      "holder": {
+        "name": "Héctor García",
+        "cedula": "V-18.492.102",
+        "phone": "0414-5551234",
+        "vehicle": "Toyota Corolla 2018",
+        "plate": "AA928LK",
+        "bloodType": "O+",
+        "emergencyContactName": "Mariana García (Esposa)",
+        "emergencyContactPhone": "0412-9876543",
+        "insurancePolicy": "Póliza Escudo Vial 24/7 #EV8842VE"
+      }
+    },
+    {
+      "sku": "EVMOTO0001",
+      "status": "inactive",
+      "category": "Moto",
+      "scansCount": 0,
+      "createdAt": "2026-09-25T16:05:00.000Z",
+      "holder": null
+    }
+  ],
+  "emergencies": [
+    {
+      "id": "emg-1790371555851",
+      "folio": "#SOS-4783-CRT",
+      "sku": "EV8842VE",
+      "holderName": "Héctor García",
+      "cedula": "V-18.492.102",
+      "phone": "0414-5551234",
+      "reporterType": "tercero",
+      "status": "critico",
+      "createdAt": "2026-09-25T21:25:55.851Z",
+      "location": {
+        "lat": 10.4880145,
+        "lng": -66.8791893,
+        "address": "Colinas de Bello Monte,  Bello Monte,  Caracas",
+        "gpsAccuracy": "Red móvil / WiFi"
+      },
+      "vehicle": "Toyota Corolla 2018 (AA928LK)",
+      "dispatchedUnit": null,
+      "notes": [
+        {
+          "time": "Justo ahora",
+          "text": "Alerta S.O.S recibida desde un tercero / testigo en Colinas de Bello Monte,  Bello Monte,  Caracas"
+        }
+      ]
+    }
+  ],
+  "reports": []
+}

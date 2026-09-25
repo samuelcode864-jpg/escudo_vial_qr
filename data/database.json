@@ -1,0 +1,32 @@
+{
+  "qrList": [
+    {
+      "sku": "EV8842VE",
+      "status": "active",
+      "category": "Auto",
+      "scansCount": 1,
+      "activatedAt": "2026-09-25T16:00:00.000Z",
+      "holder": {
+        "name": "Héctor García",
+        "cedula": "V-18.492.102",
+        "phone": "0414-5551234",
+        "vehicle": "Toyota Corolla 2018",
+        "plate": "AA928LK",
+        "bloodType": "O+",
+        "emergencyContactName": "Mariana García (Esposa)",
+        "emergencyContactPhone": "0412-9876543",
+        "insurancePolicy": "Póliza Escudo Vial 24/7 #EV8842VE"
+      }
+    },
+    {
+      "sku": "EVMOTO0001",
+      "status": "inactive",
+      "category": "Moto",
+      "scansCount": 0,
+      "createdAt": "2026-09-25T16:05:00.000Z",
+      "holder": null
+    }
+  ],
+  "emergencies": [],
+  "reports": []
+}

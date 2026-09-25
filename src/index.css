@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  --color-vial-purple: #532C8C;
+  --color-vial-dark-purple: #432172;
+  --color-vial-deep-purple: #321657;
+  --color-vial-teal: #00A896;
+  --color-vial-teal-light: #68CFC2;
+  --color-vial-teal-dark: #008677;
+  --color-vial-red: #E53838;
+  --color-vial-red-dark: #BD1818;
+
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --shadow-sos-3d: 0 16px 36px rgba(189, 24, 24, 0.55), inset 0 3px 6px rgba(255, 255, 255, 0.5), inset 0 -6px 14px rgba(0, 0, 0, 0.45);
+  --shadow-card-lift: 0 8px 24px -4px rgba(28, 12, 53, 0.18), 0 2px 6px -1px rgba(28, 12, 53, 0.08);
+}
+
+@layer base {
+  body {
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes radarPulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.18); opacity: 0.25; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+.radar-wave-1 { animation: radarPulse 3s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+.radar-wave-2 { animation: radarPulse 3s cubic-bezier(0.2, 0.8, 0.2, 1) infinite 1s; }
+.radar-wave-3 { animation: radarPulse 3s cubic-bezier(0.2, 0.8, 0.2, 1) infinite 2s; }
+
+@keyframes scaleCheck {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-success-pop {
+  animation: scaleCheck 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes beaconFlash {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 12px rgba(229, 56, 56, 0.9)); }
+  50% { opacity: 0.4; filter: drop-shadow(0 0 2px rgba(229, 56, 56, 0.4)); }
+}
+.animate-beacon {
+  animation: beaconFlash 1.2s infinite ease-in-out;
+}
+
+/* Filtro táctico nocturno para OpenStreetMap 100% gratuito sin API key ni marcas de agua */
+.tactical-dark-tiles {
+  filter: invert(100%) hue-rotate(180deg) brightness(88%) contrast(96%) saturate(85%) !important;
+}
+
