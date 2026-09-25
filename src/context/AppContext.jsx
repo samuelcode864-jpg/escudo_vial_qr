@@ -448,7 +448,15 @@ export function AppProvider({ children }) {
 
       setEmergencies(prev => prev.map(e => e.id === existingActive.id ? updatedEmergency : e));
       setUnreadAlert(updatedEmergency);
-      playEmergencyAudio();
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const dbEmg = mapEmergencyToDb(updatedEmergency);
+          await supabase.from('emergencies').upsert(dbEmg);
+        } catch (err) {
+          console.error("Error actualizando emergencia en Supabase:", err);
+        }
+      }
+
       syncServer('UPDATE_EMERGENCY', updatedEmergency);
 
       setQrList(prev => prev.map(q => {
@@ -491,6 +499,16 @@ export function AppProvider({ children }) {
     setEmergencies(prev => [newEmergency, ...prev]);
     setUnreadAlert(newEmergency);
     playEmergencyAudio();
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbEmg = mapEmergencyToDb(newEmergency);
+        await supabase.from('emergencies').upsert(dbEmg);
+      } catch (err) {
+        console.error("Error enviando emergencia a Supabase:", err);
+      }
+    }
+
     syncServer('NEW_EMERGENCY', newEmergency);
 
     setQrList(prev => prev.map(q => {
@@ -619,6 +637,16 @@ export function AppProvider({ children }) {
     };
 
     setReports(prev => [newReport, ...prev]);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRep = mapReportToDb(newReport);
+        await supabase.from('reports').upsert(dbRep);
+      } catch (err) {
+        console.error("Error enviando reporte a Supabase:", err);
+      }
+    }
+
     syncServer('NEW_REPORT', newReport);
     return newReport;
   };
