@@ -16,10 +16,6 @@ export default function AdminLogin() {
     }
   };
 
-  const handleQuickAccess = () => {
-    loginAdmin('1234');
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
       {/* Fondo de radar decorativo */}
@@ -48,7 +44,7 @@ export default function AdminLogin() {
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            <span>Clave incorrecta. Usa: <strong>1234</strong> o <strong>admin</strong></span>
+            <span>Contraseña incorrecta. Verifica e intenta nuevamente.</span>
           </div>
         )}
 
@@ -79,20 +75,6 @@ export default function AdminLogin() {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Botón de Acceso Rápido para Prueba */}
-        <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-col items-center">
-          <button
-            type="button"
-            onClick={handleQuickAccess}
-            className="text-xs text-slate-400 hover:text-teal-300 underline underline-offset-4 cursor-pointer font-medium"
-          >
-            ⚡ Acceso Rápido Automático (Demo)
-          </button>
-          <span className="text-[10px] text-slate-500 mt-1">
-            Clave por defecto: <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">1234</code> o <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-300">admin</code>
-          </span>
-        </div>
       </div>
     </div>
   );

@@ -712,7 +712,7 @@ export function AppProvider({ children }) {
   };
 
   const loginAdmin = (password) => {
-    if (password === 'admin' || password === '1234' || password === 'escudo2026') {
+    if (password === '12345') {
       setIsAdminAuthenticated(true);
       localStorage.setItem('ev_admin_auth', 'true');
       return true;
