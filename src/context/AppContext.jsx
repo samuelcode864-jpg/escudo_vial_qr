@@ -145,7 +145,7 @@ export function AppProvider({ children }) {
     if (isSupabaseConfigured && supabase) {
       // MODO NUBE: Supabase PostgreSQL + Realtime WebSockets
       Promise.all([
-        supabase.from('qrs').select('*'),
+        supabase.from('qrs').select('*').order('created_at', { ascending: false }),
         supabase.from('emergencies').select('*').order('created_at', { ascending: false }),
         supabase.from('reports').select('*').order('created_at', { ascending: false })
       ]).then(([qrsRes, emgRes, repRes]) => {
@@ -575,6 +575,14 @@ export function AppProvider({ children }) {
     });
 
     if (updatedObj) {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const dbQr = mapQrToDb(updatedObj);
+          await supabase.from('qrs').upsert(dbQr, { onConflict: 'sku' });
+        } catch (e) {
+          console.warn('Supabase qr error:', e);
+        }
+      }
       syncServer('UPDATE_QR', updatedObj);
     }
 
@@ -616,7 +624,7 @@ export function AppProvider({ children }) {
   };
 
   // 4. GENERACIÓN DE QRS POR LOTE (BATCH GENERATOR)
-  const createBatchQrs = (count = 10, prefix = 'EV2026', vehicleCategory = 'Auto') => {
+  const createBatchQrs = async (count = 10, prefix = 'EV2026', vehicleCategory = 'Auto') => {
     const newItems = [];
     const existingSkus = new Set(qrList.map(q => q.sku.toUpperCase()));
     const defaultPrefix = vehicleCategory?.toUpperCase().includes('MOTO') ? 'EVMOTO' : 'EVAUTO';
@@ -644,6 +652,16 @@ export function AppProvider({ children }) {
     }
 
     setQrList(prev => [...newItems, ...prev]);
+
+    if (isSupabaseConfigured && supabase && newItems.length > 0) {
+      try {
+        const dbQrs = newItems.map(mapQrToDb);
+        await supabase.from('qrs').upsert(dbQrs, { onConflict: 'sku' });
+      } catch (err) {
+        console.error("Error guardando lote en Supabase:", err);
+      }
+    }
+
     syncServer('BATCH_QRS', newItems);
     return newItems;
   };
@@ -703,7 +721,7 @@ export function AppProvider({ children }) {
     }));
   };
 
-  const generateNewQr = (customSku = null, category = 'Auto') => {
+  const generateNewQr = async (customSku = null, category = 'Auto') => {
     let sku = '';
     const existingSkus = new Set(qrList.map(q => q.sku.toUpperCase()));
 
@@ -741,12 +759,21 @@ export function AppProvider({ children }) {
       return [newQr, ...prev];
     });
 
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbQr = mapQrToDb(newQr);
+        await supabase.from('qrs').upsert(dbQr, { onConflict: 'sku' });
+      } catch (err) {
+        console.error("Error guardando QR en Supabase:", err);
+      }
+    }
+
     syncServer('UPDATE_QR', newQr);
     return newQr;
   };
 
   // Limpiar / Desvincular QR para devolverlo a estado "En Stock (Sin Llenar)"
-  const resetQr = (sku) => {
+  const resetQr = async (sku) => {
     const cleanSku = (sku || '').replace(/[#-]/g, '').toUpperCase();
     let updated = null;
     setQrList(prev => prev.map(q => {
@@ -765,15 +792,31 @@ export function AppProvider({ children }) {
     }));
 
     if (updated) {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const dbQr = mapQrToDb(updated);
+          await supabase.from('qrs').upsert(dbQr, { onConflict: 'sku' });
+        } catch (err) {
+          console.error("Error reseteando QR en Supabase:", err);
+        }
+      }
       syncServer('UPDATE_QR', updated);
     }
     return updated;
   };
 
   // Eliminar QR permanentemente del sistema y de la base de datos
-  const deleteQr = (sku) => {
+  const deleteQr = async (sku) => {
     const cleanSku = (sku || '').replace(/[#-]/g, '').toUpperCase();
     setQrList(prev => prev.filter(q => q.sku.toUpperCase() !== cleanSku));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('qrs').delete().eq('sku', cleanSku);
+      } catch (err) {
+        console.error("Error eliminando QR en Supabase:", err);
+      }
+    }
     syncServer('DELETE_QR', { sku: cleanSku });
   };
 

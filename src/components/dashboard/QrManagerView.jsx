@@ -185,27 +185,25 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
     printWindow.document.close();
   };
 
-  const handleCreateBatch = (e) => {
+  const handleCreateBatch = async (e) => {
     e.preventDefault();
-    const created = createBatchQrs(Number(batchCount), batchPrefix.trim().toUpperCase(), batchCategory);
+    setShowBatchModal(false);
+    const count = Number(batchCount) || 10;
+    const prefix = batchPrefix.trim().toUpperCase() || 'EV2026';
+    const created = await createBatchQrs(count, prefix, batchCategory);
     if (created && created.length > 0) {
       setSelectedSku(created[0].sku);
-      setShowBatchModal(false);
-      alert(`¡Lote de ${created.length} stickers QR creado exitosamente!`);
     }
   };
 
-  const handleCreateSingle = (e) => {
+  const handleCreateSingle = async (e) => {
     e.preventDefault();
     const skuToUse = singleSkuInput.trim() ? singleSkuInput.trim().toUpperCase() : null;
-    const created = generateNewQr(skuToUse, singleCategory);
+    setShowSingleModal(false);
+    setSingleSkuInput('');
+    const created = await generateNewQr(skuToUse, singleCategory);
     if (created) {
       setSelectedSku(created.sku);
-      setSingleSkuInput('');
-      setShowSingleModal(false);
-      alert(`¡Sticker individual ${created.sku} creado exitosamente y disponible en el catálogo!`);
-    } else {
-      alert('Ese código SKU ya se encuentra registrado en el sistema.');
     }
   };
 
