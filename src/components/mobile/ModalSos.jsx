@@ -36,29 +36,45 @@ export default function ModalSos({ isOpen, onClose }) {
     if (isSending) return;
     setIsSending(true);
 
+    const safeRole = role || selectedRole || 'titular';
+    const tempFolio = `#SOS-${Math.floor(1000 + Math.random() * 9000)}-CRT`;
+
+    // 1. Mostrar pantalla de confirmación exitosa de inmediato
+    setConfirmedEmergency({
+      folio: tempFolio,
+      location: { 
+        address: detectedGeo?.address || 'Ubicación satelital transmitida en vivo a la Central' 
+      }
+    });
+    setIsConfirmed(true);
+
+    // 2. Disparar confeti inmediatamente
+    try {
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 90,
+          spread: 80,
+          origin: { y: 0.55 },
+          zIndex: 999999
+        });
+      }
+    } catch {
+      // Ignorar si confetti falla
+    }
+
+    // 3. Despachar a la central (Supabase + Torre de Control) en segundo plano
     try {
       const emergency = await triggerSos({
         sku: activeSku,
         cedula: currentQr?.holder?.cedula || 'V-00.000.000',
         phone: currentQr?.holder?.phone || 'Sin número',
-        reporterType: role,
+        reporterType: safeRole,
         gpsEnabled: true,
         detectedCoords: detectedGeo
       });
 
-      setConfirmedEmergency(emergency);
-      setIsConfirmed(true);
-
-      // Disparar confeti de confirmación visible al frente del modal
-      try {
-        confetti({
-          particleCount: 75,
-          spread: 80,
-          origin: { y: 0.55 },
-          zIndex: 99999
-        });
-      } catch {
-        // Ignorar si confetti falla
+      if (emergency) {
+        setConfirmedEmergency(emergency);
       }
     } catch (err) {
       console.error('Error al despachar alerta S.O.S:', err);

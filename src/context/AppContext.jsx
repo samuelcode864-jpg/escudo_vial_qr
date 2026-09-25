@@ -401,10 +401,11 @@ export function AppProvider({ children }) {
     // Si ya existe una alerta activa para este vehículo (mismo SKU y no resuelto),
     // actualizar la alerta en curso y agregar nota de reiteración para evitar duplicados en el radar
     const existingActive = emergencies.find(e => 
-      e.sku.toUpperCase() === targetSku.toUpperCase() && e.status !== 'resuelto'
+      e?.sku && e.sku.toUpperCase() === targetSku.toUpperCase() && e.status !== 'resuelto'
     );
 
     if (existingActive) {
+      const existingNotes = Array.isArray(existingActive.notes) ? existingActive.notes : [];
       const updatedEmergency = {
         ...existingActive,
         location: locationData,
@@ -413,7 +414,7 @@ export function AppProvider({ children }) {
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             text: `⚠️ Alerta S.O.S reiterada por ${reporterType === 'titular' ? 'el titular' : 'un tercero'} en ${locationData.address}`
           },
-          ...existingActive.notes
+          ...existingNotes
         ]
       };
 
@@ -423,7 +424,7 @@ export function AppProvider({ children }) {
       syncServer('UPDATE_EMERGENCY', updatedEmergency);
 
       setQrList(prev => prev.map(q => {
-        if (q.sku.toUpperCase() === targetSku.toUpperCase()) {
+        if (q?.sku && q.sku.toUpperCase() === targetSku.toUpperCase()) {
           return {
             ...q,
             scansCount: (q.scansCount || 0) + 1,
@@ -465,7 +466,7 @@ export function AppProvider({ children }) {
     syncServer('NEW_EMERGENCY', newEmergency);
 
     setQrList(prev => prev.map(q => {
-      if (q.sku.toUpperCase() === targetSku.toUpperCase()) {
+      if (q?.sku && q.sku.toUpperCase() === targetSku.toUpperCase()) {
         return { 
           ...q, 
           scansCount: (q.scansCount || 0) + 1,
