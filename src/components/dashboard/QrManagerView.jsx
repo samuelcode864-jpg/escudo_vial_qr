@@ -31,11 +31,13 @@ import {
   ShieldCheck,
   HeartPulse,
   Info,
-  Calendar
+  Calendar,
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
 
 export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
-  const { qrList, createBatchQrs, generateNewQr, setActiveSku } = useApp();
+  const { qrList, createBatchQrs, generateNewQr, setActiveSku, resetQr, deleteQr } = useApp();
 
   const [selectedSku, setSelectedSku] = useState(qrList[0]?.sku || 'EV8842VE');
   const [filterType, setFilterType] = useState('todos');
@@ -204,6 +206,29 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
       alert(`¡Sticker individual ${created.sku} creado exitosamente y disponible en el catálogo!`);
     } else {
       alert('Ese código SKU ya se encuentra registrado en el sistema.');
+    }
+  };
+
+  const handleResetQr = (e, qr) => {
+    e.stopPropagation();
+    const confirmed = window.confirm(
+      `¿Deseas desvincular y limpiar la información del sticker QR ${qr.sku}?\n\n` +
+      `Los datos del vehículo y del titular (${qr.holder?.name || 'Usuario'}) serán eliminados. ` +
+      `El sticker volverá a estar "En Stock (Sin Llenar)" disponible para un nuevo usuario.`
+    );
+    if (confirmed) {
+      resetQr(qr.sku);
+    }
+  };
+
+  const handleDeleteQr = (e, qr) => {
+    e.stopPropagation();
+    const confirmed = window.confirm(
+      `⚠️ ¿Estás SEGURO de que deseas eliminar permanentemente el sticker QR ${qr.sku}?\n\n` +
+      `Esta acción borrará el sticker del catálogo y de la base de datos Supabase.`
+    );
+    if (confirmed) {
+      deleteQr(qr.sku);
     }
   };
 
@@ -885,6 +910,28 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                             >
                               <ExternalLink className="w-4 h-4" />
                             </a>
+
+                            {/* Botón Limpiar / Desvincular Datos (si está lleno) */}
+                            {isActive && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleResetQr(e, qr)}
+                                className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 transition-colors cursor-pointer"
+                                title="Limpiar datos y devolver a Stock disponible"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                            )}
+
+                            {/* Botón Eliminar QR */}
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteQr(e, qr)}
+                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                              title="Eliminar QR permanentemente"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </td>
                       </tr>

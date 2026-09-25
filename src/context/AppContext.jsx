@@ -30,11 +30,17 @@ export function AppProvider({ children }) {
       list = INITIAL_QRS || [];
     }
 
-    // Normalizar SKUs para que no tengan # ni -
-    list = list.map(q => ({
-      ...q,
-      sku: q.sku.replace(/[#-]/g, '').toUpperCase()
-    }));
+    // Normalizar SKUs y deduplicar para evitar duplicados en pantalla
+    const seen = new Set();
+    const deduped = [];
+    for (const q of list) {
+      const clean = (q.sku || '').replace(/[#-]/g, '').toUpperCase();
+      if (clean && !seen.has(clean)) {
+        seen.add(clean);
+        deduped.push({ ...q, sku: clean });
+      }
+    }
+    list = deduped;
 
     // Reconciliación: Si existen emergencias registradas en localStorage con datos de titular y vehículo,
     // garantizar que ese sticker aparezca en qrList como 'active' (Lleno / Entregado)
@@ -146,8 +152,17 @@ export function AppProvider({ children }) {
         if (!isMounted) return;
         if (qrsRes.data && qrsRes.data.length > 0) {
           const mappedQrs = qrsRes.data.map(mapQrFromDb);
-          setQrList(mappedQrs);
-          localStorage.setItem('ev_qr_list', JSON.stringify(mappedQrs));
+          const seen = new Set();
+          const deduped = [];
+          for (const q of mappedQrs) {
+            const clean = (q.sku || '').toUpperCase();
+            if (clean && !seen.has(clean)) {
+              seen.add(clean);
+              deduped.push(q);
+            }
+          }
+          setQrList(deduped);
+          localStorage.setItem('ev_qr_list', JSON.stringify(deduped));
         }
         if (emgRes.data) {
           const mappedEmgs = emgRes.data.map(mapEmergencyFromDb);
@@ -192,6 +207,11 @@ export function AppProvider({ children }) {
               }
               return [updatedQr, ...prev];
             });
+          } else if (payload.eventType === 'DELETE') {
+            const deletedSku = payload.old?.sku ? payload.old.sku.toUpperCase() : '';
+            if (deletedSku) {
+              setQrList(prev => prev.filter(q => q.sku.toUpperCase() !== deletedSku));
+            }
           }
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, (payload) => {
@@ -266,7 +286,13 @@ export function AppProvider({ children }) {
         } else if (type === 'UPDATE_QR') {
           setQrList(prev => prev.map(q => q.sku.toUpperCase() === data.sku.toUpperCase() ? data : q));
         } else if (type === 'BATCH_QRS') {
-          setQrList(prev => [...data, ...prev]);
+          setQrList(prev => {
+            const existingSkus = new Set(prev.map(q => q?.sku ? q.sku.toUpperCase() : ''));
+            const toAdd = data.filter(d => !existingSkus.has(d?.sku ? d.sku.toUpperCase() : ''));
+            return [...toAdd, ...prev];
+          });
+        } else if (type === 'DELETE_QR') {
+          setQrList(prev => prev.filter(q => q.sku.toUpperCase() !== data.sku.toUpperCase()));
         } else if (type === 'DELETE_EMERGENCY') {
           setEmergencies(prev => prev.filter(e => e.id !== data.id));
         } else if (type === 'CLEAR_RESOLVED') {
@@ -353,6 +379,8 @@ export function AppProvider({ children }) {
           const dbQrs = payload.map(mapQrToDb);
           supabase.from('qrs').upsert(dbQrs).catch(e => console.warn('Supabase batch qr error:', e));
         }
+      } else if (type === 'DELETE_QR') {
+        supabase.from('qrs').delete().eq('sku', payload.sku).catch(e => console.warn('Supabase del qr error:', e));
       } else if (type === 'NEW_REPORT') {
         const dbRep = mapReportToDb(payload);
         if (dbRep) supabase.from('reports').upsert(dbRep).catch(e => console.warn('Supabase rep error:', e));
@@ -706,9 +734,47 @@ export function AppProvider({ children }) {
       lastLocation: null
     };
 
-    setQrList(prev => [newQr, ...prev]);
-    syncServer('BATCH_QRS', [newQr]);
+    setQrList(prev => {
+      if (prev.some(q => q.sku.toUpperCase() === newQr.sku.toUpperCase())) {
+        return prev;
+      }
+      return [newQr, ...prev];
+    });
+
+    syncServer('UPDATE_QR', newQr);
     return newQr;
+  };
+
+  // Limpiar / Desvincular QR para devolverlo a estado "En Stock (Sin Llenar)"
+  const resetQr = (sku) => {
+    const cleanSku = (sku || '').replace(/[#-]/g, '').toUpperCase();
+    let updated = null;
+    setQrList(prev => prev.map(q => {
+      if (q.sku.toUpperCase() === cleanSku) {
+        updated = {
+          ...q,
+          status: 'inactive',
+          holder: null,
+          activatedAt: null,
+          scansCount: 0,
+          lastLocation: null
+        };
+        return updated;
+      }
+      return q;
+    }));
+
+    if (updated) {
+      syncServer('UPDATE_QR', updated);
+    }
+    return updated;
+  };
+
+  // Eliminar QR permanentemente del sistema y de la base de datos
+  const deleteQr = (sku) => {
+    const cleanSku = (sku || '').replace(/[#-]/g, '').toUpperCase();
+    setQrList(prev => prev.filter(q => q.sku.toUpperCase() !== cleanSku));
+    syncServer('DELETE_QR', { sku: cleanSku });
   };
 
   const loginAdmin = (password) => {
@@ -762,7 +828,9 @@ export function AppProvider({ children }) {
         clearAllData,
         deleteEmergency,
         clearResolvedEmergencies,
-        isSupabaseConfigured
+        isSupabaseConfigured,
+        resetQr,
+        deleteQr
       }}
     >
       {children}
