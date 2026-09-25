@@ -40,7 +40,6 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
   const [selectedSku, setSelectedSku] = useState(qrList[0]?.sku || 'EV8842VE');
   const [filterType, setFilterType] = useState('todos');
   const [selectedSizeCm, setSelectedSizeCm] = useState(8); // 5, 8, 12 cm
-  const [targetHostType, setTargetHostType] = useState('network'); // 'network' (192.168.7.11) | 'localhost' | 'prod'
   const [isExporting, setIsExporting] = useState(false);
   const [copiedSku, setCopiedSku] = useState(null);
   const [selectedHolderModal, setSelectedHolderModal] = useState(null);
@@ -65,15 +64,9 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
   const canvasRef = useRef(null);
   const currentQr = qrList.find(q => q.sku.toUpperCase() === selectedSku.toUpperCase()) || qrList[0] || null;
 
-  // Determinar la URL base
+  // Determinar la URL base dinámica y oficial (siempre el dominio activo)
   const getBaseUrl = () => {
-    if (targetHostType === 'network') {
-      return 'http://192.168.7.11:5173';
-    }
-    if (targetHostType === 'localhost') {
-      return 'http://localhost:5173';
-    }
-    return 'https://app.escudovial.com';
+    return window.location.origin;
   };
 
   const targetQrUrl = currentQr ? `${getBaseUrl()}/v/${currentQr.sku}` : '';
@@ -313,21 +306,15 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                 </div>
               </div>
 
-              {/* Selector de Host / IP para prueba con Celular Físico */}
-              <div className="w-full mt-2 flex items-center justify-between bg-teal-50/70 p-2 rounded-2xl border border-teal-100 text-xs">
+              {/* Dominio Oficial Activo */}
+              <div className="w-full mt-2 flex items-center justify-between bg-teal-50/70 p-2.5 rounded-2xl border border-teal-100 text-xs">
                 <div className="flex items-center gap-1.5 text-[#008677] font-bold">
-                  <Wifi className="w-3.5 h-3.5" />
-                  <span>Host Destino:</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Enlace Oficial en la Nube:</span>
                 </div>
-                <select
-                  value={targetHostType}
-                  onChange={(e) => setTargetHostType(e.target.value)}
-                  className="bg-white border border-teal-200 text-slate-800 text-[11px] font-semibold rounded-xl px-2 py-0.5 focus:outline-none cursor-pointer"
-                >
-                  <option value="network">📱 Wi-Fi Local (192.168.7.11)</option>
-                  <option value="localhost">💻 Localhost (Tu PC)</option>
-                  <option value="prod">🌐 Producción (app.escudovial.com)</option>
-                </select>
+                <span className="font-mono text-[11px] text-[#532C8C] font-extrabold truncate max-w-[200px]" title={window.location.origin}>
+                  {window.location.origin}
+                </span>
               </div>
 
               {/* RENDERIZADO DEL STICKER REAL EN CANVAS */}

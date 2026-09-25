@@ -55,6 +55,17 @@ export default function MobileHeader({ onOpenReportModal }) {
               </div>
 
               <a
+                href="/panel"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#532C8C] hover:bg-purple-100/70 bg-purple-50/60 transition-colors text-[13px] font-bold group border border-purple-100"
+              >
+                <div className="w-7 h-7 rounded-lg bg-[#532C8C] text-white flex items-center justify-center shadow-sm">
+                  <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+                </div>
+                <span>Torre de Control / Panel</span>
+              </a>
+
+              <a
                 href="#ayuda"
                 onClick={(e) => { e.preventDefault(); setMenuOpen(false); alert('Central de Soporte Escudo Vial disponible 24/7 al 01-8000-911-000'); }}
                 className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-slate-700 hover:text-[#532C8C] hover:bg-purple-50 transition-colors text-[13px] font-bold group"
