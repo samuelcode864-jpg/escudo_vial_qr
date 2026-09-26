@@ -135,21 +135,6 @@ export default function ActionCards({
           </div>
         </button>
       )}
-
-      {/* Botón Prominente: 'Reportar este conductor / Usuario' */}
-      <button
-        type="button"
-        id="openReportConductorBtn"
-        onClick={onOpenReportModal}
-        className="w-full bg-white/10 hover:bg-white/20 active:scale-[0.98] text-white font-extrabold text-[14px] py-3.5 px-4 rounded-2xl flex items-center gap-3 backdrop-blur-md border border-white/20 transition-all cursor-pointer group shadow-sm"
-      >
-        <div className="w-9 h-9 rounded-xl bg-white/15 text-rose-400 border border-white/20 flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform shrink-0">
-          <span className="material-symbols-outlined text-[20px]">warning</span>
-        </div>
-        <span className="leading-tight tracking-wide font-extrabold text-white text-left">
-          Reportar este conductor / Usuario
-        </span>
-      </button>
     </section>
   );
 }
