@@ -4,7 +4,7 @@ import { getDeviceLocation } from '../../utils/geoUtils';
 import confetti from 'canvas-confetti';
 
 export default function ModalSos({ isOpen, onClose }) {
-  const { activeSku, currentQr, triggerSos, emergencies } = useApp();
+  const { activeSku, currentQr, triggerSos, emergencies, currentLocation } = useApp();
 
   const [selectedRole, setSelectedRole] = useState('titular');
   const [isSending, setIsSending] = useState(false);
@@ -46,11 +46,27 @@ export default function ModalSos({ isOpen, onClose }) {
     const safeRole = role || selectedRole || 'titular';
     const tempFolio = `#SOS-${Math.floor(1000 + Math.random() * 9000)}-CRT`;
 
-    // 1. Mostrar pantalla de confirmación exitosa de inmediato
+    // Obtener las mejores coordenadas disponibles inmediatamente
+    let coordsToUse = detectedGeo || currentLocation;
+    if (!coordsToUse) {
+      try {
+        coordsToUse = await Promise.race([
+          getDeviceLocation(),
+          new Promise(r => setTimeout(r, 600))
+        ]);
+        if (coordsToUse) setDetectedGeo(coordsToUse);
+      } catch {}
+    }
+
+    const finalAddress = coordsToUse?.address || 'Ubicación satelital transmitida en vivo a la Central';
+
+    // 1. Mostrar pantalla de espera con la dirección real exacta
     setConfirmedEmergency({
       folio: tempFolio,
       location: { 
-        address: detectedGeo?.address || 'Ubicación satelital transmitida en vivo a la Central' 
+        address: finalAddress,
+        lat: coordsToUse?.lat,
+        lng: coordsToUse?.lng
       }
     });
     setIsConfirmed(true);
@@ -69,15 +85,14 @@ export default function ModalSos({ isOpen, onClose }) {
       // Ignorar si confetti falla
     }
 
-    // 3. Despachar a la central (Supabase + Torre de Control) en segundo plano
+    // 3. Despachar a la central (Supabase + Torre de Control) con la misma ubicación real
     try {
       const emergency = await triggerSos({
         sku: activeSku,
         cedula: currentQr?.holder?.cedula || 'V-00.000.000',
         phone: currentQr?.holder?.phone || 'Sin número',
         reporterType: safeRole,
-        gpsEnabled: true,
-        detectedCoords: detectedGeo
+        detectedCoords: coordsToUse
       });
 
       if (emergency) {

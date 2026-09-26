@@ -7,6 +7,7 @@ import ReportsTableView from './ReportsTableView';
 import QrManagerView from './QrManagerView';
 import QrStandaloneExporterView from './QrStandaloneExporterView';
 import AnalyticsView from './AnalyticsView';
+import IncomingEmergencyModal from './IncomingEmergencyModal';
 import ErrorBoundary from '../common/ErrorBoundary';
 import { 
   Radio, 
@@ -20,11 +21,20 @@ export default function DashboardMain() {
   const { emergencies } = useApp();
   const [activeTab, setActiveTab] = useState('radar'); // 'radar' | 'reportes' | 'qrs' | 'exportador' | 'metricas'
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedEmergencyId, setSelectedEmergencyId] = useState(null);
 
   const activeEmergenciesCount = emergencies.filter(e => e.status !== 'resuelto').length;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col antialiased">
+      {/* Ventana Flotante Modal con Sirena de Emergencia Entrante */}
+      <IncomingEmergencyModal 
+        onAccepted={(emgId) => {
+          setSelectedEmergencyId(emgId);
+          setActiveTab('radar');
+        }} 
+      />
+
       {/* Header de la Torre de Despacho */}
       <DashboardHeader 
         onSearch={setSearchQuery} 
@@ -94,7 +104,13 @@ export default function DashboardMain() {
         {/* Vista Activa con ErrorBoundary */}
         <div className="flex-1">
           <ErrorBoundary key={activeTab}>
-            {activeTab === 'radar' && <LiveRadarView searchQuery={searchQuery} />}
+            {activeTab === 'radar' && (
+              <LiveRadarView 
+                searchQuery={searchQuery} 
+                selectedEmergencyId={selectedEmergencyId}
+                onSelectEmergency={setSelectedEmergencyId}
+              />
+            )}
             {activeTab === 'reportes' && <ReportsTableView searchQuery={searchQuery} />}
             {activeTab === 'qrs' && <QrManagerView searchQuery={searchQuery} onGoToExporter={() => setActiveTab('exportador')} />}
             {activeTab === 'exportador' && <QrStandaloneExporterView searchQuery={searchQuery} />}

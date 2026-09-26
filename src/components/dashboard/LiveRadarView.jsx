@@ -20,7 +20,11 @@ import {
   RotateCcw
 } from 'lucide-react';
 
-export default function LiveRadarView({ searchQuery = '' }) {
+export default function LiveRadarView({ 
+  searchQuery = '',
+  selectedEmergencyId: propSelectedId,
+  onSelectEmergency: propSetSelectedId
+}) {
   const { 
     emergencies, 
     updateEmergencyStatus, 
@@ -30,8 +34,11 @@ export default function LiveRadarView({ searchQuery = '' }) {
   } = useApp();
   
   const [radarFilter, setRadarFilter] = useState('activas'); // 'activas' | 'todas'
-  const [selectedEmergencyId, setSelectedEmergencyId] = useState(emergencies[0]?.id || null);
+  const [localSelectedId, setLocalSelectedId] = useState(emergencies[0]?.id || null);
   const [newNoteText, setNewNoteText] = useState('');
+
+  const selectedEmergencyId = propSelectedId !== undefined && propSelectedId !== null ? propSelectedId : localSelectedId;
+  const setSelectedEmergencyId = propSetSelectedId || setLocalSelectedId;
 
   // Filtrado por buscador
   const filteredEmergencies = emergencies.filter(e => {

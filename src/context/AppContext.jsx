@@ -410,12 +410,12 @@ export function AppProvider({ children }) {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
 
     const locationData = {
-      lat: detectedCoords?.lat || 10.4880,
-      lng: detectedCoords?.lng || -66.8792,
+      lat: detectedCoords?.lat || currentLocation?.lat || 10.4880,
+      lng: detectedCoords?.lng || currentLocation?.lng || -66.8792,
       address: customAddress && customAddress.trim() 
         ? customAddress.trim() 
-        : (detectedCoords?.address || "Autopista Francisco Fajardo, El Recreo, Caracas"),
-      gpsAccuracy: detectedCoords?.accuracy || "Aproximada en vivo"
+        : (detectedCoords?.address || currentLocation?.address || "Autopista Francisco Fajardo, El Recreo, Caracas"),
+      gpsAccuracy: detectedCoords?.accuracy || currentLocation?.accuracy || "Aproximada en vivo"
     };
 
     // CONTROL ANTI-DUPLICADOS: Si ya existe un caso activo para este vehículo, actualizarlo en lugar de crear 5 tarjetas iguales
@@ -506,9 +506,9 @@ export function AppProvider({ children }) {
     }));
 
     // Búsqueda en segundo plano de GPS de mayor precisión sin demorar el despacho
-    if (!detectedCoords) {
+    if (!detectedCoords || !detectedCoords.lat) {
       getDeviceLocation().then(geo => {
-        if (geo && (geo.lat !== locationData.lat || geo.lng !== locationData.lng)) {
+        if (geo && (geo.lat !== locationData.lat || geo.lng !== locationData.lng || geo.address !== locationData.address)) {
           const refinedLocation = {
             lat: geo.lat,
             lng: geo.lng,
@@ -517,8 +517,9 @@ export function AppProvider({ children }) {
           };
           setEmergencies(prev => prev.map(e => e.id === newEmergency.id ? { ...e, location: refinedLocation } : e));
           if (isSupabaseConfigured && supabase) {
-            supabase.from('emergencies').update({ location: refinedLocation }).eq('id', newEmergency.id).catch(() => {});
+            supabase.from('emergencies').update({ location: refinedLocation }).eq('id', newEmergency.id).then(null, () => {});
           }
+          syncServer('UPDATE_EMERGENCY', { ...newEmergency, location: refinedLocation });
         }
       }).catch(() => {});
     }
@@ -723,6 +724,13 @@ export function AppProvider({ children }) {
       }
       return emg;
     }));
+
+    setUnreadAlert(prev => {
+      if (prev && prev.id === id) {
+        return null;
+      }
+      return prev;
+    });
   };
 
   const addEmergencyNote = (id, text) => {
