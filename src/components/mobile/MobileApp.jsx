@@ -5,6 +5,7 @@ import MobileHeader from './MobileHeader';
 import SosHero from './SosHero';
 import ActionCards from './ActionCards';
 import BottomNav from './BottomNav';
+import { Truck, Radio, ChevronRight, MessageSquare } from 'lucide-react';
 
 import ModalActivarQr from './ModalActivarQr';
 import ModalReportar from './ModalReportar';
@@ -183,36 +184,40 @@ export default function MobileApp({ showSimulatorBar = false }) {
               {activeIncident && (
                 <div 
                   onClick={() => setIsSosModalOpen(true)}
-                  className="w-full bg-gradient-to-r from-purple-950/95 via-slate-900/95 to-teal-950/95 border-2 border-teal-400/50 p-3.5 rounded-2xl shadow-xl flex items-center justify-between cursor-pointer transition-all active:scale-[0.98] group animate-in fade-in"
+                  className="w-full bg-slate-950/85 backdrop-blur-md border border-teal-400/40 p-3 sm:p-3.5 rounded-2xl shadow-xl shadow-purple-950/40 flex items-center justify-between cursor-pointer transition-all active:scale-[0.98] group animate-in fade-in relative overflow-hidden"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md ${
-                      activeIncident.status === 'en_camino' ? 'bg-[#00A896] animate-bounce' : 'bg-rose-600 animate-pulse'
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-md ${
+                      activeIncident.status === 'en_camino' 
+                        ? 'bg-gradient-to-tr from-[#00A896] to-teal-400' 
+                        : 'bg-gradient-to-tr from-rose-600 to-red-500 animate-pulse'
                     }`}>
-                      <span className="material-symbols-outlined text-[24px]">
-                        {activeIncident.status === 'en_camino' ? 'local_shipping' : 'sensors'}
-                      </span>
+                      {activeIncident.status === 'en_camino' ? (
+                        <Truck className="w-5 h-5 animate-bounce" />
+                      ) : (
+                        <Radio className="w-5 h-5 animate-spin" style={{ animationDuration: '3s' }} />
+                      )}
                     </div>
-                    <div className="text-left">
-                      <div className="flex items-center gap-1.5">
+                    <div className="text-left min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-extrabold text-white text-[13px] tracking-tight">
                           {activeIncident.status === 'en_camino' ? '¡Unidad en Camino!' : 'Alerta S.O.S Activa'}
                         </span>
-                        <span className="font-mono text-[9.5px] bg-white/20 text-teal-200 font-bold px-1.5 py-0.2 rounded">
+                        <span className="font-mono text-[10px] bg-white/10 text-teal-300 font-bold px-2 py-0.5 rounded-md whitespace-nowrap border border-white/10">
                           {activeIncident.folio}
                         </span>
                       </div>
-                      <div className="text-[11px] text-teal-200/90 mt-0.5 font-medium leading-tight">
+                      <div className="text-[11.5px] text-teal-200/90 mt-0.5 font-medium truncate max-w-[180px] sm:max-w-xs">
                         {activeIncident.status === 'en_camino' 
-                          ? `Despachado: ${activeIncident.dispatchedUnit || 'Grúa Oficial'}` 
-                          : 'Torre 24/7 coordinando tu asistencia'}
+                          ? `Despachado: ${activeIncident.dispatchedUnit || 'Unidad de Auxilio'}` 
+                          : 'Torre 24/7 coordinando asistencia'}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 bg-teal-400/20 text-teal-300 px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold border border-teal-300/30 group-hover:bg-teal-400/30 transition-colors shrink-0">
+                  <div className="flex items-center gap-1 bg-gradient-to-r from-[#00A896] to-teal-600 text-white px-3 py-2 rounded-xl text-xs font-black shadow-md shadow-teal-500/20 group-hover:brightness-110 transition-all shrink-0 ml-2">
                     <span>Ver Estado</span>
-                    <span className="material-symbols-outlined text-[15px]">chevron_right</span>
+                    <ChevronRight className="w-4 h-4" />
                   </div>
                 </div>
               )}

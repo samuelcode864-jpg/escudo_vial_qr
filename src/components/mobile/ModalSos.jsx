@@ -43,11 +43,18 @@ export default function ModalSos({ isOpen, onClose }) {
   const chatScrollRef = useRef(null);
 
   // Obtener en tiempo real la emergencia activa vinculada a este folio o SKU
-  const liveEmergency = (emergencies || []).find(e => 
+  const existingActiveEmg = (emergencies || []).find(e => 
     (confirmedEmergency?.id && e.id === confirmedEmergency.id) ||
     (confirmedEmergency?.folio && e.folio === confirmedEmergency.folio) ||
     (e.sku?.toUpperCase() === (activeSku || '').toUpperCase() && e.status !== 'resuelto')
-  ) || confirmedEmergency;
+  );
+  const liveEmergency = existingActiveEmg || confirmedEmergency;
+
+  const hasActiveEmergency = Boolean(
+    (existingActiveEmg && existingActiveEmg.status !== 'resuelto') ||
+    (confirmedEmergency && confirmedEmergency.status !== 'resuelto')
+  );
+  const showTrackingView = isConfirmed || hasActiveEmergency;
 
   // Filtrar notas válidas y no vacías
   const validNotes = (liveEmergency?.notes || []).filter(
@@ -64,13 +71,22 @@ export default function ModalSos({ isOpen, onClose }) {
     }
   }, [validNotes.length, activeTab]);
 
-  // Al abrir el modal, resetear estado y capturar GPS en segundo plano
+  // Al abrir el modal, capturar GPS y mostrar vista correspondiente
   useEffect(() => {
     if (isOpen) {
       setSelectedRole('titular');
       setIsSending(false);
-      setIsConfirmed(false);
-      setConfirmedEmergency(null);
+
+      if (hasActiveEmergency) {
+        setIsConfirmed(true);
+        if (existingActiveEmg) {
+          setConfirmedEmergency(existingActiveEmg);
+        }
+      } else {
+        setIsConfirmed(false);
+        setConfirmedEmergency(null);
+      }
+
       setActiveTab('auxilio');
       setChatMessage('');
 
@@ -81,7 +97,7 @@ export default function ModalSos({ isOpen, onClose }) {
         })
         .catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, hasActiveEmergency]);
 
   if (!isOpen) return null;
 
@@ -176,7 +192,7 @@ export default function ModalSos({ isOpen, onClose }) {
       <div 
         className="bg-white rounded-3xl p-4 sm:p-5 w-full max-w-sm sm:max-w-md flex flex-col items-center shadow-2xl relative border border-purple-100 max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200"
       >
-        {!isConfirmed ? (
+        {!showTrackingView ? (
           /* ======================================================== */
           /* PASO DIRECTO: SELECCIÓN DE QUIÉN REPORTA (TITULAR DEFAULT) */
           /* ======================================================== */
