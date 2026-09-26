@@ -190,6 +190,10 @@ export function AppProvider({ children }) {
           } else if (payload.eventType === 'UPDATE') {
             const updated = mapEmergencyFromDb(payload.new);
             setEmergencies(prev => prev.map(e => e.id === updated.id ? updated : e));
+            if (updated.status === 'critico') {
+              setUnreadAlert(updated);
+              playEmergencyAudio();
+            }
           } else if (payload.eventType === 'DELETE') {
             setEmergencies(prev => prev.filter(e => e.id !== payload.old.id));
           }
@@ -395,83 +399,20 @@ export function AppProvider({ children }) {
     scansCount: 0
   };
 
-  // 1. DISPARAR EMERGENCIA CON GEOLOCALIZACIÓN REAL Y REVERSE GEOCODING
-  const triggerSos = async ({ sku, cedula, phone, reporterType, gpsEnabled = true, customAddress = null, detectedCoords = null }) => {
-    const targetSku = sku || activeSku;
-    const qrRecord = qrList.find(q => q.sku.toUpperCase() === targetSku.toUpperCase());
+  // 1. DISPARAR EMERGENCIA CON DESPACHO INMEDIATO A SUPABASE (0ms de retraso)
+  const triggerSos = async ({ sku, cedula, phone, reporterType, customAddress = null, detectedCoords = null }) => {
+    const targetSku = (sku || activeSku || 'EV8842VE').replace(/[#-]/g, '').toUpperCase();
+    const qrRecord = qrList.find(q => q.sku.toUpperCase() === targetSku);
     const randomNum = Math.floor(1000 + Math.random() * 9000);
 
-    let locationData = {
+    const locationData = {
       lat: detectedCoords?.lat || 10.4880,
       lng: detectedCoords?.lng || -66.8792,
-      address: customAddress && customAddress.trim() ? customAddress.trim() : (detectedCoords?.address || "Colinas de Bello Monte, Caracas"),
-      gpsAccuracy: detectedCoords?.accuracy || "Aproximada"
+      address: customAddress && customAddress.trim() 
+        ? customAddress.trim() 
+        : (detectedCoords?.address || "Autopista Francisco Fajardo, El Recreo, Caracas"),
+      gpsAccuracy: detectedCoords?.accuracy || "Aproximada en vivo"
     };
-
-    if (gpsEnabled && !detectedCoords) {
-      try {
-        const geoResult = await getDeviceLocation();
-        locationData = {
-          lat: geoResult.lat,
-          lng: geoResult.lng,
-          address: customAddress && customAddress.trim() ? customAddress.trim() : geoResult.address,
-          gpsAccuracy: geoResult.accuracy
-        };
-      } catch {
-        if (customAddress && customAddress.trim()) {
-          locationData.address = customAddress.trim();
-        }
-      }
-    } else if (customAddress && customAddress.trim()) {
-      locationData.address = customAddress.trim();
-    }
-
-    // Si ya existe una alerta activa para este vehículo (mismo SKU y no resuelto),
-    // actualizar la alerta en curso y agregar nota de reiteración para evitar duplicados en el radar
-    const existingActive = emergencies.find(e => 
-      e?.sku && e.sku.toUpperCase() === targetSku.toUpperCase() && e.status !== 'resuelto'
-    );
-
-    if (existingActive) {
-      const existingNotes = Array.isArray(existingActive.notes) ? existingActive.notes : [];
-      const updatedEmergency = {
-        ...existingActive,
-        location: locationData,
-        notes: [
-          {
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            text: `⚠️ Alerta S.O.S reiterada por ${reporterType === 'titular' ? 'el titular' : 'un tercero'} en ${locationData.address}`
-          },
-          ...existingNotes
-        ]
-      };
-
-      setEmergencies(prev => prev.map(e => e.id === existingActive.id ? updatedEmergency : e));
-      setUnreadAlert(updatedEmergency);
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const dbEmg = mapEmergencyToDb(updatedEmergency);
-          await supabase.from('emergencies').upsert(dbEmg);
-        } catch (err) {
-          console.error("Error actualizando emergencia en Supabase:", err);
-        }
-      }
-
-      syncServer('UPDATE_EMERGENCY', updatedEmergency);
-
-      setQrList(prev => prev.map(q => {
-        if (q?.sku && q.sku.toUpperCase() === targetSku.toUpperCase()) {
-          return {
-            ...q,
-            scansCount: (q.scansCount || 0) + 1,
-            lastLocation: locationData
-          };
-        }
-        return q;
-      }));
-
-      return updatedEmergency;
-    }
 
     const newEmergency = {
       id: `emg-${Date.now()}`,
@@ -491,19 +432,21 @@ export function AppProvider({ children }) {
       notes: [
         { 
           time: "Justo ahora", 
-          text: `Alerta S.O.S recibida desde ${reporterType === 'titular' ? 'el titular del vehículo' : 'un tercero / testigo'} en ${locationData.address}` 
+          text: `Alerta S.O.S despachada por ${reporterType === 'titular' ? 'el conductor titular' : 'un testigo en vía'} en ${locationData.address}` 
         }
       ]
     };
 
+    // Actualizar estado local inmediatamente
     setEmergencies(prev => [newEmergency, ...prev]);
     setUnreadAlert(newEmergency);
     playEmergencyAudio();
 
+    // Guardar DIRECTAMENTE en Supabase Cloud con inserción inmediata
     if (isSupabaseConfigured && supabase) {
       try {
         const dbEmg = mapEmergencyToDb(newEmergency);
-        await supabase.from('emergencies').upsert(dbEmg);
+        await supabase.from('emergencies').insert(dbEmg);
       } catch (err) {
         console.error("Error enviando emergencia a Supabase:", err);
       }
@@ -512,7 +455,7 @@ export function AppProvider({ children }) {
     syncServer('NEW_EMERGENCY', newEmergency);
 
     setQrList(prev => prev.map(q => {
-      if (q?.sku && q.sku.toUpperCase() === targetSku.toUpperCase()) {
+      if (q?.sku && q.sku.toUpperCase() === targetSku) {
         return { 
           ...q, 
           scansCount: (q.scansCount || 0) + 1,
@@ -521,6 +464,24 @@ export function AppProvider({ children }) {
       }
       return q;
     }));
+
+    // Búsqueda en segundo plano de GPS de mayor precisión sin demorar el despacho
+    if (!detectedCoords) {
+      getDeviceLocation().then(geo => {
+        if (geo && (geo.lat !== locationData.lat || geo.lng !== locationData.lng)) {
+          const refinedLocation = {
+            lat: geo.lat,
+            lng: geo.lng,
+            address: geo.address || locationData.address,
+            gpsAccuracy: geo.accuracy || "GPS Alta Precisión"
+          };
+          setEmergencies(prev => prev.map(e => e.id === newEmergency.id ? { ...e, location: refinedLocation } : e));
+          if (isSupabaseConfigured && supabase) {
+            supabase.from('emergencies').update({ location: refinedLocation }).eq('id', newEmergency.id).catch(() => {});
+          }
+        }
+      }).catch(() => {});
+    }
 
     return newEmergency;
   };
