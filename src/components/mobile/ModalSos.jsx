@@ -25,7 +25,8 @@ import {
   Camera,
   Mic,
   Share2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  X
 } from 'lucide-react';
 
 export default function ModalSos({ isOpen, onClose }) {
@@ -45,6 +46,7 @@ export default function ModalSos({ isOpen, onClose }) {
   const [detectedGeo, setDetectedGeo] = useState(null);
   const [activeTab, setActiveTab] = useState('auxilio'); // 'auxilio' | 'chat'
   const [chatMessage, setChatMessage] = useState('');
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState(null);
   
   // Estados para foto y nota de voz
   const [isRecording, setIsRecording] = useState(false);
@@ -721,12 +723,11 @@ ${window.location.origin}/v/${activeSku || 'EV8842VE'}`;
 
                               {/* Foto Adjunta */}
                               {msg.imageUrl && (
-                                <div className="mt-1.5">
+                                <div className="mt-1.5 cursor-pointer" onClick={() => setPreviewPhotoUrl(msg.imageUrl)}>
                                   <img 
                                     src={msg.imageUrl} 
                                     alt="Foto en vía" 
-                                    className="rounded-xl max-h-44 w-auto object-cover border border-white/20 shadow-xs cursor-pointer hover:opacity-95"
-                                    onClick={() => window.open(msg.imageUrl, '_blank')}
+                                    className="rounded-xl max-h-44 w-auto object-cover border border-white/20 shadow-xs hover:opacity-95 transition-opacity"
                                   />
                                 </div>
                               )}
@@ -757,12 +758,11 @@ ${window.location.origin}/v/${activeSku || 'EV8842VE'}`;
 
                             {/* Foto Adjunta de la Central */}
                             {msg.imageUrl && (
-                              <div className="mt-1.5">
+                              <div className="mt-1.5 cursor-pointer" onClick={() => setPreviewPhotoUrl(msg.imageUrl)}>
                                 <img 
                                   src={msg.imageUrl} 
                                   alt="Foto central" 
-                                  className="rounded-xl max-h-44 w-auto object-cover border border-slate-200 shadow-xs cursor-pointer hover:opacity-95"
-                                  onClick={() => window.open(msg.imageUrl, '_blank')}
+                                  className="rounded-xl max-h-44 w-auto object-cover border border-slate-200 shadow-xs hover:opacity-95 transition-opacity"
                                 />
                               </div>
                             )}
@@ -894,6 +894,34 @@ ${window.location.origin}/v/${activeSku || 'EV8842VE'}`;
           </div>
         )}
       </div>
+
+      {/* Modal Lightbox Visor de Foto a Pantalla Completa */}
+      {previewPhotoUrl && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center p-3 bg-black/95 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPreviewPhotoUrl(null)}
+        >
+          <div 
+            className="relative max-w-sm sm:max-w-md max-h-[90vh] flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewPhotoUrl(null)}
+              className="absolute -top-11 right-0 bg-white/20 text-white rounded-full p-2 hover:bg-white/30 transition-all cursor-pointer"
+              title="Cerrar visor"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <img 
+              src={previewPhotoUrl} 
+              alt="Foto ampliada" 
+              className="max-h-[80vh] max-w-[92vw] object-contain rounded-2xl shadow-2xl border border-white/20"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -18,7 +18,10 @@ import {
   Trash2,
   Archive,
   RotateCcw,
-  Send
+  Send,
+  X,
+  Download,
+  ZoomIn
 } from 'lucide-react';
 
 export default function LiveRadarView({ 
@@ -38,6 +41,7 @@ export default function LiveRadarView({
   const [radarFilter, setRadarFilter] = useState('activas'); // 'activas' | 'todas'
   const [localSelectedId, setLocalSelectedId] = useState(emergencies[0]?.id || null);
   const [newNoteText, setNewNoteText] = useState('');
+  const [previewImageUrl, setPreviewImageUrl] = useState(null);
   const chatScrollRef = useRef(null);
 
   const selectedEmergencyId = propSelectedId !== undefined && propSelectedId !== null ? propSelectedId : localSelectedId;
@@ -394,13 +398,15 @@ export default function LiveRadarView({
                         >
                           {msg.text && <div>{msg.text}</div>}
                           {msg.imageUrl && (
-                            <div className="mt-1.5">
+                            <div className="mt-1.5 relative group cursor-pointer" onClick={() => setPreviewImageUrl(msg.imageUrl)}>
                               <img 
                                 src={msg.imageUrl} 
                                 alt="Foto enviada" 
-                                className="rounded-lg max-h-48 w-auto object-cover border border-slate-200 cursor-pointer shadow-xs hover:opacity-95" 
-                                onClick={() => window.open(msg.imageUrl, '_blank')}
+                                className="rounded-lg max-h-48 w-auto object-cover border border-slate-200 shadow-xs hover:brightness-95 transition-all" 
                               />
+                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center text-white transition-opacity">
+                                <ZoomIn className="w-6 h-6 drop-shadow-md" />
+                              </div>
                             </div>
                           )}
                           {msg.audioUrl && (
@@ -511,6 +517,45 @@ export default function LiveRadarView({
           </div>
         )}
       </div>
+
+      {/* Modal Lightbox Visor de Fotos en Alta Resolución */}
+      {previewImageUrl && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setPreviewImageUrl(null)}
+        >
+          <div 
+            className="relative max-w-4xl max-h-[90vh] flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewImageUrl(null)}
+              className="absolute -top-12 right-0 bg-white/20 hover:bg-white/30 text-white rounded-full p-2 transition-all cursor-pointer"
+              title="Cerrar visor"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <img 
+              src={previewImageUrl} 
+              alt="Foto ampliada de la emergencia" 
+              className="max-h-[80vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-white/20"
+            />
+
+            <div className="mt-3 flex items-center gap-3">
+              <a 
+                href={previewImageUrl} 
+                download="evidencia_emergencia.jpg"
+                className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 border border-white/20 transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Descargar Foto Original</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
