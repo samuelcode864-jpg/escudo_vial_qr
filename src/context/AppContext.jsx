@@ -198,7 +198,8 @@ export function AppProvider({ children }) {
               }
               return e;
             }));
-            if (updated.status === 'critico') {
+            // SÓLO alertar como nueva si el estatus cambió de otro estado a 'critico' (reapertura)
+            if (payload.old && payload.old.status && payload.old.status !== 'critico' && updated.status === 'critico') {
               setUnreadAlert(updated);
               playEmergencyAudio();
             }
@@ -811,6 +812,7 @@ export function AppProvider({ children }) {
       return emg;
     }));
 
+    setUnreadAlert(prev => (prev && prev.id === id ? null : prev));
     playChatAudio();
   };
 
