@@ -24,7 +24,9 @@ import {
   ZoomIn,
   Radio,
   FileText,
-  Sparkles
+  Sparkles,
+  Inbox,
+  ChevronRight
 } from 'lucide-react';
 
 export default function LiveRadarView({ 
@@ -117,6 +119,14 @@ export default function LiveRadarView({
   const lastMsg = selectedEmergency?.notes?.[notesCount - 1];
   const isLastFromDriver = lastMsg && lastMsg.sender === 'usuario';
   const showGlowAlert = hasUnread && isLastFromDriver;
+
+  // Total de conversaciones con mensajes pendientes del conductor en todo el radar
+  const totalUnreadConversations = displayedEmergencies.filter(e => {
+    const count = e.notes?.length || 0;
+    const read = lastReadCounts[e.id] ?? count;
+    const last = e.notes?.[count - 1];
+    return count > read && last && last.sender === 'usuario';
+  }).length;
 
   // Marcar como leído cuando el operador está en la pestaña de chat
   useEffect(() => {
@@ -270,30 +280,28 @@ export default function LiveRadarView({
               </div>
             </div>
 
-            {/* Pestañas de Navegación del Panel: Chat Táctico vs Ficha & Vehículo */}
+            {/* Pestañas de Navegación del Panel: Chat Táctico vs Bandeja Multichat vs Ficha */}
             <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200">
               <button
                 type="button"
                 onClick={() => setRightColTab('chat')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer relative ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer relative ${
                   rightColTab === 'chat'
                     ? 'bg-slate-950 text-white shadow-md'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
-                <div className="relative flex items-center gap-1.5">
-                  <Radio className={`w-3.5 h-3.5 ${rightColTab === 'chat' ? 'text-emerald-400' : 'text-slate-500'}`} />
-                  <span>CONSOLA CHAT TÁCTICO</span>
-                  {showGlowAlert && (
-                    <span className="flex h-2.5 w-2.5 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                    </span>
-                  )}
-                </div>
+                <Radio className={`w-3.5 h-3.5 ${rightColTab === 'chat' ? 'text-emerald-400' : 'text-slate-500'}`} />
+                <span className="truncate">CHAT ACTIVO</span>
+                {showGlowAlert && (
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                )}
                 {selectedEmergency.notes?.length > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
-                    rightColTab === 'chat' ? 'bg-slate-800 text-emerald-400 border border-slate-700' : 'bg-slate-200 text-slate-700'
+                  <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-mono ${
+                    rightColTab === 'chat' ? 'bg-slate-800 text-emerald-400' : 'bg-slate-200 text-slate-700'
                   }`}>
                     {selectedEmergency.notes.length}
                   </span>
@@ -302,15 +310,34 @@ export default function LiveRadarView({
 
               <button
                 type="button"
+                onClick={() => setRightColTab('inbox')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer relative ${
+                  rightColTab === 'inbox'
+                    ? 'bg-teal-700 text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <Inbox className="w-3.5 h-3.5" />
+                <span className="truncate">BANDEJA ({displayedEmergencies.length})</span>
+                {totalUnreadConversations > 0 && (
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setRightColTab('ficha')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
                   rightColTab === 'ficha'
                     ? 'bg-[#532C8C] text-white shadow-md'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>FICHA & VEHÍCULO</span>
+                <span className="truncate">FICHA</span>
               </button>
             </div>
 
@@ -366,8 +393,116 @@ export default function LiveRadarView({
               )}
             </div>
 
-            {/* Contenido según la pestaña activa: Chat Táctico o Ficha Técnica */}
-            {rightColTab === 'ficha' ? (
+            {/* Contenido según la pestaña activa: Chat Táctico, Bandeja Multichat o Ficha Técnica */}
+            {rightColTab === 'inbox' ? (
+              /* Bandeja Multichat: Lista de todas las conversaciones activas */
+              <div className="bg-slate-900 rounded-2xl p-3.5 border border-slate-800 flex flex-col gap-3 shadow-xl animate-in fade-in">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Inbox className="w-4 h-4 text-teal-400" />
+                    <span className="font-extrabold text-xs text-white uppercase tracking-wider">
+                      Centro de Conversaciones en Vivo
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold text-teal-300 bg-teal-950/80 border border-teal-800 px-2 py-0.5 rounded-full font-mono">
+                    {displayedEmergencies.length} {displayedEmergencies.length === 1 ? 'caso' : 'casos'}
+                  </span>
+                </div>
+
+                {/* Lista de Chats con vista previa */}
+                <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+                  {displayedEmergencies.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500 text-xs italic">
+                      No hay emergencias registradas en este momento.
+                    </div>
+                  ) : (
+                    displayedEmergencies.map((emg) => {
+                      const isSelected = selectedEmergency?.id === emg.id;
+                      const emgNotes = emg.notes || [];
+                      const lastMessage = emgNotes[emgNotes.length - 1];
+                      const emgLastRead = lastReadCounts[emg.id] ?? emgNotes.length;
+                      const hasUnreadThis = emgNotes.length > emgLastRead && lastMessage?.sender === 'usuario';
+
+                      let previewText = "Sin mensajes aún";
+                      if (lastMessage) {
+                        if (lastMessage.imageUrl) previewText = "📷 [Foto de la emergencia adjuntada]";
+                        else if (lastMessage.audioUrl) previewText = "🎤 [Nota de voz enviada]";
+                        else previewText = lastMessage.text || "Mensaje enviado";
+                      }
+
+                      return (
+                        <div
+                          key={emg.id}
+                          onClick={() => {
+                            setSelectedEmergencyId(emg.id);
+                            setRightColTab('chat');
+                          }}
+                          className={`p-3 rounded-2xl border transition-all cursor-pointer text-left relative ${
+                            isSelected
+                              ? 'bg-slate-950 text-white border-emerald-500/80 shadow-lg ring-2 ring-emerald-400/40'
+                              : 'bg-slate-950/60 hover:bg-slate-950 text-slate-300 border-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`font-extrabold text-xs ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                                  {emg.holderName}
+                                </span>
+                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60">
+                                  {emg.folio}
+                                </span>
+                                <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${
+                                  emg.status === 'critico'
+                                    ? 'bg-rose-500 text-white'
+                                    : emg.status === 'en_camino'
+                                      ? 'bg-teal-500 text-white'
+                                      : 'bg-slate-700 text-slate-300'
+                                }`}>
+                                  {emg.status === 'critico' ? 'Crítico' : emg.status === 'en_camino' ? 'En Curso' : 'Resuelto'}
+                                </span>
+                              </div>
+
+                              <div className="text-[11px] truncate mt-0.5 text-slate-400">
+                                🚗 {emg.vehicle || 'Vehículo en vía'} • 📞 {emg.phone}
+                              </div>
+
+                              {/* Vista previa del último mensaje */}
+                              <div className={`text-xs mt-1.5 truncate flex items-center gap-1.5 ${
+                                hasUnreadThis
+                                  ? 'text-emerald-400 font-black'
+                                  : 'text-slate-400 font-medium'
+                              }`}>
+                                <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                                <span className="truncate">{previewText}</span>
+                              </div>
+                            </div>
+
+                            {/* Lado derecho: Hora y Badges */}
+                            <div className="flex flex-col items-end shrink-0 gap-1">
+                              <span className="text-[10px] font-mono text-slate-500">
+                                {lastMessage?.time || new Date(emg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+
+                              {hasUnreadThis && (
+                                <span className="bg-emerald-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                                  NUEVO
+                                </span>
+                              )}
+
+                              <div className="mt-1 flex items-center gap-0.5 text-xs text-teal-400 font-bold hover:underline">
+                                <span>Abrir</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : rightColTab === 'ficha' ? (
               /* Ficha Completa del Afectado y Vehículo */
               <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3 text-xs animate-in fade-in">
                 <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
@@ -445,9 +580,20 @@ export default function LiveRadarView({
                       </div>
                     </div>
                   </div>
-                  <span className="text-[9.5px] font-extrabold text-teal-300 bg-teal-950/80 px-2 py-0.5 rounded-md border border-teal-800 font-mono tracking-wider">
-                    EN VIVO
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setRightColTab('inbox')}
+                      className="text-[9.5px] font-bold text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-700 px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                      title="Ver todos los chats en curso"
+                    >
+                      <Inbox className="w-3 h-3 text-teal-400" />
+                      <span>Bandeja ({displayedEmergencies.length})</span>
+                    </button>
+                    <span className="text-[9.5px] font-extrabold text-teal-300 bg-teal-950/80 px-2 py-0.5 rounded-md border border-teal-800 font-mono tracking-wider">
+                      EN VIVO
+                    </span>
+                  </div>
                 </div>
 
                 {/* Contenedor de Mensajes con Scroll Ampliado */}

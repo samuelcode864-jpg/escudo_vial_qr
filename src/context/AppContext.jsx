@@ -640,6 +640,42 @@ export function AppProvider({ children }) {
     return updatedObj;
   };
 
+  // 2.1 ACTUALIZAR / EDITAR DATOS DEL TITULAR DE UN QR
+  const updateQrHolder = async (sku, updatedHolderData) => {
+    const targetSku = (sku || '').replace(/[#-]/g, '').toUpperCase();
+    let updatedObj = null;
+
+    setQrList(prev => {
+      return prev.map(q => {
+        if (q.sku.replace(/[#-]/g, '').toUpperCase() === targetSku) {
+          updatedObj = {
+            ...q,
+            holder: {
+              ...q.holder,
+              ...updatedHolderData
+            }
+          };
+          return updatedObj;
+        }
+        return q;
+      });
+    });
+
+    if (updatedObj) {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const dbQr = mapQrToDb(updatedObj);
+          await supabase.from('qrs').upsert(dbQr, { onConflict: 'sku' });
+        } catch (e) {
+          console.warn('Supabase qr update error:', e);
+        }
+      }
+      syncServer('UPDATE_QR', updatedObj);
+    }
+
+    return updatedObj;
+  };
+
   // 3. ENVIAR REPORTE
   const submitReport = async ({ reason, details, sku }) => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -980,6 +1016,7 @@ export function AppProvider({ children }) {
         logoutAdmin,
         triggerSos,
         activateQr,
+        updateQrHolder,
         submitReport,
         createBatchQrs,
         updateEmergencyStatus,

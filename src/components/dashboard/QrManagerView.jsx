@@ -33,11 +33,12 @@ import {
   Info,
   Calendar,
   RotateCcw,
-  Trash2
+  Trash2,
+  Edit3
 } from 'lucide-react';
 
 export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
-  const { qrList, createBatchQrs, generateNewQr, setActiveSku, resetQr, deleteQr } = useApp();
+  const { qrList, createBatchQrs, generateNewQr, setActiveSku, resetQr, deleteQr, updateQrHolder } = useApp();
 
   const [selectedSku, setSelectedSku] = useState(qrList[0]?.sku || 'EV8842VE');
   const [filterType, setFilterType] = useState('todos');
@@ -45,6 +46,19 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
   const [isExporting, setIsExporting] = useState(false);
   const [copiedSku, setCopiedSku] = useState(null);
   const [selectedHolderModal, setSelectedHolderModal] = useState(null);
+  const [editingQrModal, setEditingQrModal] = useState(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    cedula: '',
+    phone: '',
+    vehicle: '',
+    plate: '',
+    bloodType: 'O+',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    insurancePolicy: ''
+  });
 
   // Modales
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -112,6 +126,42 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
     navigator.clipboard.writeText(url);
     setCopiedSku(sku);
     setTimeout(() => setCopiedSku(null), 2000);
+  };
+
+  const handleOpenEditModal = (qr) => {
+    if (!qr) return;
+    setEditingQrModal(qr);
+    setEditFormData({
+      name: qr.holder?.name || '',
+      cedula: qr.holder?.cedula || '',
+      phone: qr.holder?.phone || '',
+      vehicle: qr.holder?.vehicle || '',
+      plate: qr.holder?.plate || '',
+      bloodType: qr.holder?.bloodType || 'O+',
+      emergencyContactName: qr.holder?.emergencyContactName || '',
+      emergencyContactPhone: qr.holder?.emergencyContactPhone || '',
+      insurancePolicy: qr.holder?.insurancePolicy || `Póliza Escudo Vial 24/7 #${qr.sku}`
+    });
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingQrModal) return;
+    setIsSavingEdit(true);
+    try {
+      await updateQrHolder(editingQrModal.sku, editFormData);
+      if (selectedHolderModal?.sku === editingQrModal.sku) {
+        setSelectedHolderModal(prev => ({
+          ...prev,
+          holder: { ...prev.holder, ...editFormData }
+        }));
+      }
+      setEditingQrModal(null);
+    } catch (err) {
+      alert("Error al actualizar la ficha del vehículo: " + err.message);
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const handleExportZip = async () => {
@@ -873,17 +923,30 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1">
                             {isActive && qr.holder && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedHolderModal(qr);
-                                }}
-                                className="p-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-[#00A896] transition-colors"
-                                title="Ver Ficha Completa del Conductor"
-                              >
-                                <User className="w-4 h-4" />
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedHolderModal(qr);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-[#00A896] transition-colors cursor-pointer"
+                                  title="Ver Ficha Completa del Conductor"
+                                >
+                                  <User className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditModal(qr);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors cursor-pointer"
+                                  title="Editar datos del titular y vehículo"
+                                >
+                                  <Edit3 className="w-4 h-4" />
+                                </button>
+                              </>
                             )}
 
                             <button
@@ -1335,14 +1398,222 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
               <button
                 type="button"
                 onClick={() => {
+                  handleOpenEditModal(selectedHolderModal);
+                }}
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-extrabold text-xs py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                title="Editar información de este vehículo"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Editar Ficha</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
                   setSelectedSku(selectedHolderModal.sku);
                   setSelectedHolderModal(null);
                 }}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-xl transition-all cursor-pointer"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 px-3.5 rounded-xl transition-all cursor-pointer"
               >
                 Ver Troquel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Editar Información del Titular y Vehículo */}
+      {editingQrModal && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSavingEdit) setEditingQrModal(null);
+          }}
+        >
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl relative border border-blue-100 animate-in zoom-in-95 duration-200 flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
+            {/* Header del Modal */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 border border-blue-100">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-extrabold text-slate-900 leading-tight">
+                      Editar Ficha del Vehículo
+                    </h3>
+                    <span className="font-mono text-xs font-bold text-[#532C8C] bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                      {editingQrModal.sku}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Modifica los datos del conductor o vehículo sin alterar el código QR físico.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                onClick={() => setEditingQrModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Formulario de Edición */}
+            <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
+              {/* Sección 1: Titular */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-3">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  👤 Datos del Conductor Titular
+                </span>
+                
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Nombre Completo</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#532C8C]"
+                    placeholder="Ej. Carlos Pérez"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Cédula de Identidad</label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormData.cedula}
+                      onChange={(e) => setEditFormData({ ...editFormData, cedula: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#532C8C]"
+                      placeholder="Ej. V-18.452.901"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Teléfono Principal</label>
+                    <input
+                      type="tel"
+                      required
+                      value={editFormData.phone}
+                      onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#532C8C]"
+                      placeholder="Ej. 0414-1234567"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 2: Vehículo */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-3">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  🚗 Datos del Vehículo
+                </span>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Marca y Modelo</label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormData.vehicle}
+                      onChange={(e) => setEditFormData({ ...editFormData, vehicle: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#532C8C]"
+                      placeholder="Ej. Bera SBR 150 / Toyota Corolla"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Placa</label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormData.plate}
+                      onChange={(e) => setEditFormData({ ...editFormData, plate: e.target.value.toUpperCase() })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono uppercase focus:outline-none focus:border-[#532C8C]"
+                      placeholder="Ej. AA1A00A"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Tipo de Sangre</label>
+                    <select
+                      value={editFormData.bloodType}
+                      onChange={(e) => setEditFormData({ ...editFormData, bloodType: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#532C8C]"
+                    >
+                      {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Póliza / Contrato</label>
+                    <input
+                      type="text"
+                      value={editFormData.insurancePolicy}
+                      onChange={(e) => setEditFormData({ ...editFormData, insurancePolicy: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#532C8C]"
+                      placeholder="Póliza 24/7 #..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 3: Contacto Familiar de Emergencia */}
+              <div className="bg-teal-50/70 p-3.5 rounded-2xl border border-teal-100 space-y-3">
+                <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">
+                  📞 Contacto Familiar de Auxilio
+                </span>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Nombre Familiar</label>
+                    <input
+                      type="text"
+                      value={editFormData.emergencyContactName}
+                      onChange={(e) => setEditFormData({ ...editFormData, emergencyContactName: e.target.value })}
+                      className="w-full bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-[#00A896]"
+                      placeholder="Ej. Esposa / Padre"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Teléfono Familiar</label>
+                    <input
+                      type="tel"
+                      value={editFormData.emergencyContactPhone}
+                      onChange={(e) => setEditFormData({ ...editFormData, emergencyContactPhone: e.target.value })}
+                      className="w-full bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-[#00A896]"
+                      placeholder="Ej. 0424-9876543"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isSavingEdit}
+                  onClick={() => setEditingQrModal(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-3 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-extrabold text-xs py-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-600/30 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSavingEdit ? 'Guardando...' : 'Guardar Cambios'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
