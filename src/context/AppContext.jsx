@@ -189,7 +189,15 @@ export function AppProvider({ children }) {
             playEmergencyAudio();
           } else if (payload.eventType === 'UPDATE') {
             const updated = mapEmergencyFromDb(payload.new);
-            setEmergencies(prev => prev.map(e => e.id === updated.id ? updated : e));
+            setEmergencies(prev => prev.map(e => {
+              if (e.id === updated.id) {
+                if (Array.isArray(updated.notes) && updated.notes.length > (e.notes?.length || 0)) {
+                  playChatAudio();
+                }
+                return updated;
+              }
+              return e;
+            }));
             if (updated.status === 'critico') {
               setUnreadAlert(updated);
               playEmergencyAudio();
@@ -345,6 +353,28 @@ export function AppProvider({ children }) {
       osc.stop(audioCtx.currentTime + 0.8);
     } catch {
       // AudioContext bloqueado
+    }
+  };
+
+  const playChatAudio = () => {
+    try {
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtxClass) return;
+      const audioCtx = new AudioCtxClass();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // Nota Re5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12); // Nota La5
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.25);
+    } catch {
+      // Audio bloqueado
     }
   };
 
@@ -747,6 +777,43 @@ export function AppProvider({ children }) {
     }));
   };
 
+  const sendEmergencyChatMessage = (id, text, sender = 'central', senderName = '') => {
+    if (!id || !text || !text.trim()) return;
+    const cleanText = text.trim();
+    const newMsg = {
+      id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      sender, // 'central' | 'usuario'
+      senderName: senderName || (sender === 'central' ? 'Central de Monitoreo 24/7' : 'Conductor / Titular'),
+      text: cleanText,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: new Date().toISOString()
+    };
+
+    setEmergencies(prev => prev.map(emg => {
+      if (emg.id === id) {
+        const existingNotes = Array.isArray(emg.notes) ? emg.notes : [];
+        const updatedNotes = [...existingNotes, newMsg];
+        const updated = {
+          ...emg,
+          notes: updatedNotes
+        };
+
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const dbEmg = mapEmergencyToDb(updated);
+            supabase.from('emergencies').upsert(dbEmg).then(null, e => console.warn('Supabase chat error:', e));
+          } catch {}
+        }
+
+        syncServer('UPDATE_EMERGENCY', updated);
+        return updated;
+      }
+      return emg;
+    }));
+
+    playChatAudio();
+  };
+
   const deleteEmergency = (id) => {
     setEmergencies(prev => prev.filter(emg => emg.id !== id));
     syncServer('DELETE_EMERGENCY', { id });
@@ -911,6 +978,8 @@ export function AppProvider({ children }) {
         createBatchQrs,
         updateEmergencyStatus,
         addEmergencyNote,
+        sendEmergencyChatMessage,
+        playChatAudio,
         updateReportStatus,
         generateNewQr,
         clearAllData,

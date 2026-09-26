@@ -1,16 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { getDeviceLocation } from '../../utils/geoUtils';
 import confetti from 'canvas-confetti';
+import { 
+  ShieldAlert, 
+  User, 
+  Users, 
+  Check, 
+  RefreshCw, 
+  Send, 
+  Truck, 
+  MapPin, 
+  AlertTriangle, 
+  CheckCircle, 
+  Radio, 
+  Navigation, 
+  Clock, 
+  Phone, 
+  MessageSquare,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
 
 export default function ModalSos({ isOpen, onClose }) {
-  const { activeSku, currentQr, triggerSos, emergencies, currentLocation } = useApp();
+  const { 
+    activeSku, 
+    currentQr, 
+    triggerSos, 
+    emergencies, 
+    currentLocation,
+    sendEmergencyChatMessage 
+  } = useApp();
 
   const [selectedRole, setSelectedRole] = useState('titular');
   const [isSending, setIsSending] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [confirmedEmergency, setConfirmedEmergency] = useState(null);
   const [detectedGeo, setDetectedGeo] = useState(null);
+  const [chatMessage, setChatMessage] = useState('');
+  const [isChatExpanded, setIsChatExpanded] = useState(true);
+  const chatScrollRef = useRef(null);
 
   // Obtener en tiempo real la emergencia activa vinculada a este folio o SKU
   const liveEmergency = (emergencies || []).find(e => 
@@ -19,6 +48,13 @@ export default function ModalSos({ isOpen, onClose }) {
     (e.sku?.toUpperCase() === (activeSku || '').toUpperCase() && e.status !== 'resuelto')
   ) || confirmedEmergency;
 
+  // Auto-scroll al final del chat cuando entran nuevos mensajes
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [liveEmergency?.notes]);
+
   // Al abrir el modal, resetear estado y capturar GPS en segundo plano
   useEffect(() => {
     if (isOpen) {
@@ -26,6 +62,7 @@ export default function ModalSos({ isOpen, onClose }) {
       setIsSending(false);
       setIsConfirmed(false);
       setConfirmedEmergency(null);
+      setChatMessage('');
 
       // Detección silenciosa de GPS
       getDeviceLocation()
@@ -105,6 +142,14 @@ export default function ModalSos({ isOpen, onClose }) {
     }
   };
 
+  const handleSendMessage = (textToSend) => {
+    const targetText = textToSend || chatMessage;
+    if (!targetText || !targetText.trim() || !liveEmergency?.id) return;
+    const senderName = currentQr?.holder?.name || (selectedRole === 'titular' ? 'Conductor Titular' : 'Testigo en Vía');
+    sendEmergencyChatMessage(liveEmergency.id, targetText.trim(), 'usuario', senderName);
+    setChatMessage('');
+  };
+
   const handleClose = () => {
     setIsConfirmed(false);
     setConfirmedEmergency(null);
@@ -113,7 +158,7 @@ export default function ModalSos({ isOpen, onClose }) {
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isSending) handleClose();
       }}
@@ -128,9 +173,7 @@ export default function ModalSos({ isOpen, onClose }) {
           <div className="w-full flex flex-col items-center">
             {/* Ícono de Alerta de Emergencia */}
             <div className="w-14 h-14 rounded-2xl bg-rose-50 text-[#E53838] flex items-center justify-center mb-2 shadow-inner border border-rose-100">
-              <span className="material-symbols-outlined text-[32px]" style={{ fontVariationSettings: '"FILL" 1' }}>
-                e911_emergency
-              </span>
+              <ShieldAlert className="w-8 h-8 text-[#E53838]" />
             </div>
 
             <h3 className="text-[#532C8C] font-extrabold text-[20px] tracking-tight leading-tight uppercase mb-1">
@@ -153,7 +196,7 @@ export default function ModalSos({ isOpen, onClose }) {
                 }`}
               >
                 <div className="w-11 h-11 rounded-xl bg-[#532C8C] text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <span className="material-symbols-outlined text-[24px]">badge</span>
+                  <User className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
@@ -168,7 +211,7 @@ export default function ModalSos({ isOpen, onClose }) {
                 </div>
                 {selectedRole === 'titular' && (
                   <div className="w-6 h-6 rounded-full bg-[#532C8C] text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <span className="material-symbols-outlined text-[16px] font-bold">check</span>
+                    <Check className="w-4 h-4" />
                   </div>
                 )}
               </button>
@@ -185,7 +228,7 @@ export default function ModalSos({ isOpen, onClose }) {
                 }`}
               >
                 <div className="w-11 h-11 rounded-xl bg-teal-100 text-[#00A896] flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[24px]">group</span>
+                  <Users className="w-6 h-6 text-[#00A896]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-slate-900 text-[14px]">Soy un tercero / testigo</div>
@@ -195,7 +238,7 @@ export default function ModalSos({ isOpen, onClose }) {
                 </div>
                 {selectedRole === 'tercero' && (
                   <div className="w-6 h-6 rounded-full bg-[#00A896] text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <span className="material-symbols-outlined text-[16px] font-bold">check</span>
+                    <Check className="w-4 h-4" />
                   </div>
                 )}
               </button>
@@ -210,14 +253,12 @@ export default function ModalSos({ isOpen, onClose }) {
             >
               {isSending ? (
                 <>
-                  <span className="material-symbols-outlined text-[20px] animate-spin">sync</span>
+                  <RefreshCw className="w-5 h-5 animate-spin" />
                   <span>TRANSMITIENDO A LA CENTRAL...</span>
                 </>
               ) : (
                 <>
-                  <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: '"FILL" 1' }}>
-                    send
-                  </span>
+                  <Send className="w-5 h-5" />
                   <span>ENVIAR ALERTA AHORA (S.O.S)</span>
                 </>
               )}
@@ -244,9 +285,7 @@ export default function ModalSos({ isOpen, onClose }) {
                 <div className="relative flex items-center justify-center my-3">
                   <span className="animate-ping absolute inline-flex h-20 w-20 rounded-full bg-teal-400 opacity-40"></span>
                   <div className="relative w-18 h-18 rounded-3xl bg-gradient-to-tr from-[#00A896] via-teal-500 to-emerald-400 text-white flex items-center justify-center shadow-xl shadow-teal-500/30 border-2 border-white">
-                    <span className="material-symbols-outlined text-[38px] animate-bounce">
-                      local_shipping
-                    </span>
+                    <Truck className="w-10 h-10 animate-bounce text-white" />
                   </div>
                 </div>
 
@@ -258,7 +297,7 @@ export default function ModalSos({ isOpen, onClose }) {
                 <h3 className="text-slate-900 font-black text-[20px] tracking-tight uppercase leading-tight">
                   ¡Auxilio Vial en Camino!
                 </h3>
-                <p className="text-slate-600 text-[12px] leading-snug mt-1 mb-3">
+                <p className="text-slate-600 text-[12px] leading-snug mt-1 mb-2">
                   La Torre de Control ha coordinado y despachado la unidad para brindarte asistencia inmediata.
                 </p>
 
@@ -273,7 +312,9 @@ export default function ModalSos({ isOpen, onClose }) {
                     <span className="text-[9px] font-extrabold text-emerald-800 mt-1">Asignada</span>
                   </div>
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-6 h-6 rounded-full bg-[#00A896] text-white flex items-center justify-center text-[11px] font-bold animate-pulse">🚗</div>
+                    <div className="w-6 h-6 rounded-full bg-[#00A896] text-white flex items-center justify-center text-[11px] font-bold animate-pulse">
+                      <Truck className="w-3.5 h-3.5" />
+                    </div>
                     <span className="text-[9px] font-extrabold text-teal-800 mt-1">En Ruta</span>
                   </div>
                 </div>
@@ -288,21 +329,21 @@ export default function ModalSos({ isOpen, onClose }) {
                   </div>
 
                   <div className="flex items-start gap-2 border-b border-teal-200/60 pb-2">
-                    <span className="material-symbols-outlined text-[18px] text-[#00A896] shrink-0 mt-0.5">
-                      tow_truck
-                    </span>
+                    <div className="w-6 h-6 rounded-lg bg-teal-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <Truck className="w-4 h-4 text-[#00A896]" />
+                    </div>
                     <div className="text-[11.5px] leading-tight">
                       <span className="font-bold text-slate-900 block">Recurso Despachado:</span>
                       <span className="font-black text-teal-900 text-xs">
-                        {liveEmergency?.dispatchedUnit || 'Grúa Vial Oficial Escudo 24/7'}
+                        {liveEmergency?.dispatchedUnit || 'Unidad Oficial de Auxilio Vial 24/7'}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-start gap-2">
-                    <span className="material-symbols-outlined text-[18px] text-rose-500 shrink-0 mt-0.5">
-                      location_on
-                    </span>
+                    <div className="w-6 h-6 rounded-lg bg-rose-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <MapPin className="w-4 h-4 text-rose-500" />
+                    </div>
                     <div className="text-[11.5px] leading-tight">
                       <span className="font-bold text-slate-900 block">Punto de Encuentro:</span>
                       <span className="text-slate-600 text-[11px]">{liveEmergency?.location?.address || 'Ubicación satelital transmitida'}</span>
@@ -312,7 +353,7 @@ export default function ModalSos({ isOpen, onClose }) {
 
                 {/* Caja de Recomendación de Seguridad */}
                 <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl p-2.5 text-left flex items-center gap-2 mt-2 text-amber-900 text-[11px]">
-                  <span className="material-symbols-outlined text-amber-600 text-[20px] shrink-0">warning</span>
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
                   <span>Enciende las luces intermitentes y mantente en un lugar seguro mientras llega la unidad.</span>
                 </div>
               </>
@@ -320,7 +361,7 @@ export default function ModalSos({ isOpen, onClose }) {
               /* ESTADO C: CASO RESUELTO */
               <>
                 <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center my-3 border border-emerald-200 shadow-sm">
-                  <span className="material-symbols-outlined text-[36px]">check_circle</span>
+                  <CheckCircle className="w-10 h-10 text-emerald-600" />
                 </div>
                 <h3 className="text-slate-900 font-extrabold text-[19px] tracking-tight uppercase leading-tight">
                   ¡Asistencia Finalizada!
@@ -337,9 +378,7 @@ export default function ModalSos({ isOpen, onClose }) {
                   <span className="animate-ping absolute inline-flex h-24 w-24 rounded-full bg-purple-400 opacity-30"></span>
                   <span className="animate-pulse absolute inline-flex h-16 w-16 rounded-full bg-teal-300 opacity-50"></span>
                   <div className="relative w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#532C8C] to-[#00A896] text-white flex items-center justify-center shadow-xl shadow-purple-900/30 border-2 border-white">
-                    <span className="material-symbols-outlined text-[36px] animate-spin" style={{ animationDuration: '4s' }}>
-                      radar
-                    </span>
+                    <Radio className="w-8 h-8 text-white animate-spin" style={{ animationDuration: '4s' }} />
                   </div>
                 </div>
 
@@ -381,9 +420,9 @@ export default function ModalSos({ isOpen, onClose }) {
                   </div>
 
                   <div className="flex items-start gap-2">
-                    <span className="material-symbols-outlined text-[17px] text-[#00A896] shrink-0 mt-0.5">
-                      my_location
-                    </span>
+                    <div className="w-6 h-6 rounded-lg bg-teal-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <Navigation className="w-3.5 h-3.5 text-[#00A896]" />
+                    </div>
                     <div className="text-[11.5px] text-slate-700 leading-tight">
                       <span className="font-bold text-slate-900 block">Ubicación Satelital:</span>
                       <span className="text-slate-600 text-[11px]">{liveEmergency?.location?.address || confirmedEmergency?.location?.address || 'Ubicación satelital transmitida'}</span>
@@ -391,9 +430,9 @@ export default function ModalSos({ isOpen, onClose }) {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[17px] text-amber-500 shrink-0">
-                      hourglass_top
-                    </span>
+                    <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                      <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                    </div>
                     <div className="text-[11.5px]">
                       <span className="font-bold text-slate-900">Estado: </span>
                       <span className="text-amber-600 font-extrabold uppercase animate-pulse">Esperando asignación de unidad</span>
@@ -403,12 +442,138 @@ export default function ModalSos({ isOpen, onClose }) {
               </>
             )}
 
+            {/* ======================================================== */}
+            {/* SECCIÓN DE CHAT EN VIVO BIDIRECCIONAL CON LA CENTRAL */}
+            {/* ======================================================== */}
+            {liveEmergency?.status !== 'resuelto' && (
+              <div className="w-full mt-3 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden text-left flex flex-col">
+                {/* Cabecera del Chat Plegable */}
+                <button
+                  type="button"
+                  onClick={() => setIsChatExpanded(!isChatExpanded)}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white px-3 py-2.5 flex items-center justify-between cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <MessageSquare className="w-4 h-4 text-teal-300" />
+                    <span className="font-extrabold text-xs tracking-wide">
+                      Chat en Vivo con la Central 24/7
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-300 text-[11px]">
+                    <span className="text-[10px] text-emerald-400 font-semibold">Operador activo</span>
+                    {isChatExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </div>
+                </button>
+
+                {isChatExpanded && (
+                  <div className="p-2.5 flex flex-col gap-2 bg-slate-50/50">
+                    {/* Lista de Mensajes / Bitácora */}
+                    <div 
+                      ref={chatScrollRef}
+                      className="max-h-44 min-h-[100px] overflow-y-auto space-y-2 pr-1 text-xs"
+                    >
+                      {(!liveEmergency?.notes || liveEmergency.notes.length === 0) ? (
+                        <div className="text-center text-slate-400 text-[11px] py-4 italic">
+                          La Central está conectada. Escribe o usa las respuestas rápidas abajo.
+                        </div>
+                      ) : (
+                        liveEmergency.notes.map((msg, idx) => {
+                          const isUser = msg.sender === 'usuario';
+                          const isCentral = msg.sender === 'central';
+
+                          if (!isUser && !isCentral) {
+                            // Nota del sistema
+                            return (
+                              <div key={msg.id || idx} className="text-center my-1">
+                                <span className="bg-slate-200 text-slate-600 text-[9.5px] px-2 py-0.5 rounded-full inline-block font-medium">
+                                  {msg.text}
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div 
+                              key={msg.id || idx} 
+                              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+                            >
+                              <div className="text-[9.5px] text-slate-400 font-semibold mb-0.5 px-1 flex items-center gap-1">
+                                <span>{isUser ? 'Tú' : '🛡️ Central 24/7'}</span>
+                                <span>•</span>
+                                <span>{msg.time}</span>
+                              </div>
+                              <div 
+                                className={`px-3 py-2 rounded-2xl max-w-[85%] text-xs shadow-xs leading-relaxed ${
+                                  isUser 
+                                    ? 'bg-gradient-to-r from-[#00A896] to-teal-600 text-white rounded-tr-none' 
+                                    : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none font-medium'
+                                }`}
+                              >
+                                {msg.text}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Botones de Respuestas Rápidas a 1 Toque */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                      {[
+                        'Estoy orillado a la derecha',
+                        'Tengo intermitentes encendidas',
+                        'Ya veo llegar la unidad',
+                        '¿Cuánto tiempo estimado?'
+                      ].map((chip, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleSendMessage(chip)}
+                          className="bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 text-slate-700 text-[10.5px] px-2.5 py-1 rounded-xl whitespace-nowrap font-medium transition-all shadow-2xs active:scale-95 cursor-pointer"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Caja de Entrada de Texto */}
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }}
+                      className="flex items-center gap-1.5 mt-1"
+                    >
+                      <input 
+                        type="text"
+                        value={chatMessage}
+                        onChange={(e) => setChatMessage(e.target.value)}
+                        placeholder="Escribe a la central..."
+                        className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#00A896] shadow-inner"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!chatMessage.trim()}
+                        className="bg-[#00A896] hover:bg-[#008677] disabled:opacity-40 text-white p-2 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Botón de Llamada Telefónica Directa de Emergencia */}
             <a
               href="tel:0800372836"
               className="w-full mt-3 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-[12px] uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all"
             >
-              <span className="material-symbols-outlined text-[17px] text-emerald-400">call</span>
+              <Phone className="w-4 h-4 text-emerald-400" />
               <span>Llamar Central Directo (0800-ESCUDO)</span>
             </a>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import TacticalLeafletMap from './TacticalLeafletMap';
 import { 
@@ -17,7 +17,8 @@ import {
   Car,
   Trash2,
   Archive,
-  RotateCcw
+  RotateCcw,
+  Send
 } from 'lucide-react';
 
 export default function LiveRadarView({ 
@@ -29,6 +30,7 @@ export default function LiveRadarView({
     emergencies, 
     updateEmergencyStatus, 
     addEmergencyNote,
+    sendEmergencyChatMessage,
     deleteEmergency,
     clearResolvedEmergencies
   } = useApp();
@@ -36,6 +38,7 @@ export default function LiveRadarView({
   const [radarFilter, setRadarFilter] = useState('activas'); // 'activas' | 'todas'
   const [localSelectedId, setLocalSelectedId] = useState(emergencies[0]?.id || null);
   const [newNoteText, setNewNoteText] = useState('');
+  const chatScrollRef = useRef(null);
 
   const selectedEmergencyId = propSelectedId !== undefined && propSelectedId !== null ? propSelectedId : localSelectedId;
   const setSelectedEmergencyId = propSetSelectedId || setLocalSelectedId;
@@ -60,11 +63,23 @@ export default function LiveRadarView({
 
   const selectedEmergency = emergencies.find(e => e.id === selectedEmergencyId) || displayedEmergencies[0] || emergencies[0] || null;
 
+  // Auto-scroll en la ventana de chat táctico
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [selectedEmergency?.notes]);
+
+  const handleSendChatMessage = (text) => {
+    const textToSend = text || newNoteText;
+    if (!textToSend || !textToSend.trim() || !selectedEmergency) return;
+    sendEmergencyChatMessage(selectedEmergency.id, textToSend.trim(), 'central', 'Operador Alpha');
+    setNewNoteText('');
+  };
+
   const handleAddNote = (e) => {
     e.preventDefault();
-    if (!newNoteText.trim() || !selectedEmergency) return;
-    addEmergencyNote(selectedEmergency.id, newNoteText.trim());
-    setNewNoteText('');
+    handleSendChatMessage();
   };
 
   const handleDispatch = (unit) => {
@@ -317,35 +332,108 @@ export default function LiveRadarView({
               )}
             </div>
 
-            {/* Bitácora de Novedades del Caso */}
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                Bitácora de Seguimiento
-              </span>
+            {/* Chat Táctico y Bitácora en Vivo con el Conductor */}
+            <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1">
+                    <MessageSquare className="w-3.5 h-3.5 text-[#532C8C]" />
+                    Chat Táctico en Vivo con Conductor
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                  Canal Directo 24/7
+                </span>
+              </div>
               
-              <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                {selectedEmergency.notes?.map((n, i) => (
-                  <div key={i} className="text-[11px] bg-slate-50 p-2 rounded-xl border border-slate-100 flex items-start gap-2">
-                    <span className="font-bold text-[#532C8C] shrink-0 font-mono text-[10px]">{n.time}</span>
-                    <span className="text-slate-700">{n.text}</span>
+              {/* Contenedor de Mensajes con Scroll */}
+              <div 
+                ref={chatScrollRef}
+                className="space-y-2 max-h-40 overflow-y-auto pr-1 text-xs"
+              >
+                {(!selectedEmergency.notes || selectedEmergency.notes.length === 0) ? (
+                  <div className="text-center text-slate-400 text-[11px] py-3 italic">
+                    Sin mensajes aún. Escribe o usa las respuestas rápidas para comunicarte con el conductor.
                   </div>
+                ) : (
+                  selectedEmergency.notes.map((msg, i) => {
+                    const isUser = msg.sender === 'usuario';
+                    const isCentral = msg.sender === 'central';
+
+                    if (!isUser && !isCentral) {
+                      // Mensaje o evento del sistema
+                      return (
+                        <div key={msg.id || i} className="text-center my-1">
+                          <span className="bg-slate-200/80 text-slate-600 text-[9.5px] px-2 py-0.5 rounded-full inline-block font-medium">
+                            {msg.text}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div 
+                        key={msg.id || i} 
+                        className={`flex flex-col ${isCentral ? 'items-end' : 'items-start'}`}
+                      >
+                        <div className="text-[9.5px] text-slate-400 font-semibold mb-0.5 px-1 flex items-center gap-1">
+                          <span>{isCentral ? '🛡️ Tú (Central)' : '📱 Conductor'}</span>
+                          <span>•</span>
+                          <span>{msg.time}</span>
+                        </div>
+                        <div 
+                          className={`px-3 py-1.5 rounded-xl max-w-[85%] text-xs shadow-2xs leading-relaxed ${
+                            isCentral 
+                              ? 'bg-[#532C8C] text-white rounded-tr-none' 
+                              : 'bg-white text-slate-900 border border-teal-200 rounded-tl-none font-medium'
+                          }`}
+                        >
+                          {msg.text}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Botones de Respuestas Rápidas para el Operador */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {[
+                  'Unidad de auxilio en ruta, tiempo estimado 10 min.',
+                  'Permanece en un lugar seguro con intermitentes.',
+                  'Te llamaremos al teléfono para mayor referencia.'
+                ].map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSendChatMessage(chip)}
+                    className="bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 text-slate-700 text-[10px] px-2 py-0.5 rounded-lg whitespace-nowrap font-medium transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+                  >
+                    {chip}
+                  </button>
                 ))}
               </div>
 
-              {/* Input para agregar notas */}
-              <form onSubmit={handleAddNote} className="flex items-center gap-1.5 mt-1">
+              {/* Input para redactar mensaje al conductor */}
+              <form onSubmit={handleAddNote} className="flex items-center gap-1.5 mt-0.5">
                 <input
                   type="text"
                   value={newNoteText}
                   onChange={(e) => setNewNoteText(e.target.value)}
-                  placeholder="Agregar actualización al caso..."
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#532C8C]"
+                  placeholder="Escribir mensaje directo al teléfono del usuario..."
+                  className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#532C8C] shadow-inner"
                 />
                 <button
                   type="submit"
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-1.5 rounded-xl cursor-pointer"
+                  disabled={!newNoteText.trim()}
+                  className="bg-[#532C8C] hover:bg-purple-800 disabled:opacity-40 text-white p-2 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
+                  title="Enviar mensaje al conductor"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Send className="w-4 h-4" />
                 </button>
               </form>
             </div>
