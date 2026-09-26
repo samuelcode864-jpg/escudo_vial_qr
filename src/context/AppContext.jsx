@@ -368,26 +368,30 @@ export function AppProvider({ children }) {
 
     // Sincronización transparente con Supabase en la Nube
     if (isSupabaseConfigured && supabase) {
-      if (type === 'NEW_EMERGENCY' || type === 'UPDATE_EMERGENCY') {
-        const dbEmg = mapEmergencyToDb(payload);
-        if (dbEmg) supabase.from('emergencies').upsert(dbEmg).catch(e => console.warn('Supabase emg error:', e));
-      } else if (type === 'DELETE_EMERGENCY') {
-        supabase.from('emergencies').delete().eq('id', payload.id).catch(e => console.warn('Supabase del emg error:', e));
-      } else if (type === 'CLEAR_RESOLVED') {
-        supabase.from('emergencies').delete().eq('status', 'resuelto').catch(e => console.warn('Supabase clear error:', e));
-      } else if (type === 'UPDATE_QR') {
-        const dbQr = mapQrToDb(payload);
-        if (dbQr) supabase.from('qrs').upsert(dbQr).catch(e => console.warn('Supabase qr error:', e));
-      } else if (type === 'BATCH_QRS') {
-        if (Array.isArray(payload) && payload.length > 0) {
-          const dbQrs = payload.map(mapQrToDb);
-          supabase.from('qrs').upsert(dbQrs).catch(e => console.warn('Supabase batch qr error:', e));
+      try {
+        if (type === 'NEW_EMERGENCY' || type === 'UPDATE_EMERGENCY') {
+          const dbEmg = mapEmergencyToDb(payload);
+          if (dbEmg) supabase.from('emergencies').upsert(dbEmg).then(null, (e) => console.warn('Supabase emg error:', e));
+        } else if (type === 'DELETE_EMERGENCY') {
+          supabase.from('emergencies').delete().eq('id', payload.id).then(null, (e) => console.warn('Supabase del emg error:', e));
+        } else if (type === 'CLEAR_RESOLVED') {
+          supabase.from('emergencies').delete().eq('status', 'resuelto').then(null, (e) => console.warn('Supabase clear error:', e));
+        } else if (type === 'UPDATE_QR') {
+          const dbQr = mapQrToDb(payload);
+          if (dbQr) supabase.from('qrs').upsert(dbQr).then(null, (e) => console.warn('Supabase qr error:', e));
+        } else if (type === 'BATCH_QRS') {
+          if (Array.isArray(payload) && payload.length > 0) {
+            const dbQrs = payload.map(mapQrToDb);
+            supabase.from('qrs').upsert(dbQrs).then(null, (e) => console.warn('Supabase batch qr error:', e));
+          }
+        } else if (type === 'DELETE_QR') {
+          supabase.from('qrs').delete().eq('sku', payload.sku).then(null, (e) => console.warn('Supabase del qr error:', e));
+        } else if (type === 'NEW_REPORT') {
+          const dbRep = mapReportToDb(payload);
+          if (dbRep) supabase.from('reports').upsert(dbRep).then(null, (e) => console.warn('Supabase rep error:', e));
         }
-      } else if (type === 'DELETE_QR') {
-        supabase.from('qrs').delete().eq('sku', payload.sku).catch(e => console.warn('Supabase del qr error:', e));
-      } else if (type === 'NEW_REPORT') {
-        const dbRep = mapReportToDb(payload);
-        if (dbRep) supabase.from('reports').upsert(dbRep).catch(e => console.warn('Supabase rep error:', e));
+      } catch (err) {
+        console.warn('Supabase sync error:', err);
       }
     }
   };
@@ -413,6 +417,42 @@ export function AppProvider({ children }) {
         : (detectedCoords?.address || "Autopista Francisco Fajardo, El Recreo, Caracas"),
       gpsAccuracy: detectedCoords?.accuracy || "Aproximada en vivo"
     };
+
+    // CONTROL ANTI-DUPLICADOS: Si ya existe un caso activo para este vehículo, actualizarlo en lugar de crear 5 tarjetas iguales
+    const existingActive = emergencies.find(e => 
+      e?.sku && e.sku.toUpperCase() === targetSku && e.status !== 'resuelto'
+    );
+
+    if (existingActive) {
+      const existingNotes = Array.isArray(existingActive.notes) ? existingActive.notes : [];
+      const updatedEmergency = {
+        ...existingActive,
+        location: locationData,
+        notes: [
+          {
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            text: `⚠️ Alerta S.O.S reiterada por el usuario en ${locationData.address}`
+          },
+          ...existingNotes
+        ]
+      };
+
+      setEmergencies(prev => prev.map(e => e.id === existingActive.id ? updatedEmergency : e));
+      setUnreadAlert(updatedEmergency);
+      playEmergencyAudio();
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const dbEmg = mapEmergencyToDb(updatedEmergency);
+          await supabase.from('emergencies').upsert(dbEmg);
+        } catch (err) {
+          console.error("Error actualizando emergencia en Supabase:", err);
+        }
+      }
+
+      syncServer('UPDATE_EMERGENCY', updatedEmergency);
+      return updatedEmergency;
+    }
 
     const newEmergency = {
       id: `emg-${Date.now()}`,
@@ -674,7 +714,7 @@ export function AppProvider({ children }) {
         if (isSupabaseConfigured && supabase) {
           try {
             const dbEmg = mapEmergencyToDb(updated);
-            supabase.from('emergencies').upsert(dbEmg).catch(e => console.warn('Supabase emg status error:', e));
+            supabase.from('emergencies').upsert(dbEmg).then(null, e => console.warn('Supabase emg status error:', e));
           } catch {}
         }
 

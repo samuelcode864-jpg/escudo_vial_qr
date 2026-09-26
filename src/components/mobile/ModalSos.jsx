@@ -129,7 +129,7 @@ export default function ModalSos({ isOpen, onClose }) {
               {/* Opción 1: Soy el Titular (PRE-SELECCIONADO POR DEFECTO) */}
               <button
                 type="button"
-                onClick={() => handleConfirm('titular')}
+                onClick={() => setSelectedRole('titular')}
                 disabled={isSending}
                 className={`w-full p-3.5 rounded-2xl flex items-center gap-3 text-left transition-all active:scale-[0.98] cursor-pointer shadow-sm relative border-2 ${
                   selectedRole === 'titular'
@@ -151,17 +151,23 @@ export default function ModalSos({ isOpen, onClose }) {
                     La póliza o vehículo me pertenece
                   </div>
                 </div>
-                <div className="w-6 h-6 rounded-full bg-[#532C8C] text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <span className="material-symbols-outlined text-[16px] font-bold">check</span>
-                </div>
+                {selectedRole === 'titular' && (
+                  <div className="w-6 h-6 rounded-full bg-[#532C8C] text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <span className="material-symbols-outlined text-[16px] font-bold">check</span>
+                  </div>
+                )}
               </button>
 
               {/* Opción 2: Soy un Tercero / Testigo */}
               <button
                 type="button"
-                onClick={() => handleConfirm('tercero')}
+                onClick={() => setSelectedRole('tercero')}
                 disabled={isSending}
-                className="w-full p-3.5 rounded-2xl flex items-center gap-3 text-left transition-all active:scale-[0.98] cursor-pointer shadow-sm border border-slate-200 bg-white hover:bg-teal-50/70 hover:border-[#00A896]"
+                className={`w-full p-3.5 rounded-2xl flex items-center gap-3 text-left transition-all active:scale-[0.98] cursor-pointer shadow-sm border-2 ${
+                  selectedRole === 'tercero'
+                    ? 'border-[#00A896] bg-teal-50/70 ring-2 ring-teal-300/30'
+                    : 'border-slate-200 bg-white hover:bg-teal-50/70'
+                }`}
               >
                 <div className="w-11 h-11 rounded-xl bg-teal-100 text-[#00A896] flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-[24px]">group</span>
@@ -172,9 +178,11 @@ export default function ModalSos({ isOpen, onClose }) {
                     Acompañante, testigo o socorrista en la vía
                   </div>
                 </div>
-                <span className="material-symbols-outlined text-slate-400">
-                  chevron_right
-                </span>
+                {selectedRole === 'tercero' && (
+                  <div className="w-6 h-6 rounded-full bg-[#00A896] text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <span className="material-symbols-outlined text-[16px] font-bold">check</span>
+                  </div>
+                )}
               </button>
             </div>
 

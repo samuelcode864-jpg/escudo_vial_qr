@@ -32,7 +32,6 @@ export default function LiveRadarView({ searchQuery = '' }) {
   const [radarFilter, setRadarFilter] = useState('activas'); // 'activas' | 'todas'
   const [selectedEmergencyId, setSelectedEmergencyId] = useState(emergencies[0]?.id || null);
   const [newNoteText, setNewNoteText] = useState('');
-  const [dispatchUnitName, setDispatchUnitName] = useState('Grúa Vial #04');
 
   // Filtrado por buscador
   const filteredEmergencies = emergencies.filter(e => {
@@ -280,39 +279,32 @@ export default function LiveRadarView({ searchQuery = '' }) {
               </a>
             </div>
 
-            {/* Módulo de Despacho de Unidades de Auxilio */}
-            <div className="bg-purple-50/60 rounded-2xl p-3 border border-purple-100 flex flex-col gap-2">
-              <span className="text-[11px] font-bold text-[#532C8C] uppercase tracking-wider flex items-center gap-1">
-                <Truck className="w-3.5 h-3.5" />
-                Despachar Recurso de Emergencia
-              </span>
-
-              <div className="flex items-center gap-2">
-                <select
-                  value={dispatchUnitName}
-                  onChange={(e) => setDispatchUnitName(e.target.value)}
-                  className="flex-1 bg-white border border-purple-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#532C8C]"
-                >
-                  <option value="Grúa Vial #04 (Plataforma)">Grúa Vial #04 (Plataforma)</option>
-                  <option value="Ambulancia Triage #02">Ambulancia Triage #02</option>
-                  <option value="Paramédico en Moto #01">Paramédico en Moto #01</option>
-                  <option value="Patrulla de Seguridad Vial">Patrulla de Seguridad Vial</option>
-                </select>
-
+            {/* Botón de Acción Principal de la Torre de Control */}
+            <div className="flex flex-col gap-2">
+              {selectedEmergency.status === 'critico' ? (
                 <button
                   type="button"
-                  onClick={() => handleDispatch(dispatchUnitName)}
-                  className="bg-[#532C8C] hover:bg-[#432172] active:scale-95 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-sm"
+                  onClick={() => handleDispatch('Unidad de Auxilio Vial')}
+                  className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:brightness-110 active:scale-[0.98] text-white font-black text-sm py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-600/30 cursor-pointer uppercase tracking-wider"
                 >
-                  Despachar
+                  <CheckCircle className="w-5 h-5 text-white" />
+                  <span>ACEPTAR Y ATENDER EMERGENCIA</span>
                 </button>
-              </div>
-
-              {selectedEmergency.dispatchedUnit && (
-                <div className="bg-white rounded-xl p-2 border border-purple-200/80 flex items-center justify-between text-xs text-purple-900 font-semibold mt-1">
-                  <span>Asignado: {selectedEmergency.dispatchedUnit}</span>
-                  <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                    En ruta
+              ) : selectedEmergency.status === 'en_camino' ? (
+                <div className="bg-teal-50 border border-teal-200 rounded-2xl p-3 flex items-center justify-between text-xs text-teal-900 font-extrabold">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-500 animate-ping"></span>
+                    <span>¡EMERGENCIA ACEPTADA Y EN ATENCIÓN!</span>
+                  </div>
+                  <span className="bg-teal-200/80 text-teal-800 text-[10px] px-2 py-0.5 rounded-md uppercase">
+                    En Curso
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-slate-100 border border-slate-200 rounded-2xl p-3 flex items-center justify-between text-xs text-slate-700 font-bold">
+                  <span>Asistencia solventada y cerrada</span>
+                  <span className="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded-md uppercase">
+                    Resuelto
                   </span>
                 </div>
               )}
@@ -353,53 +345,42 @@ export default function LiveRadarView({ searchQuery = '' }) {
 
             {/* Acciones de Cierre / Retiro del Caso */}
             <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
-              {selectedEmergency.status !== 'resuelto' ? (
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={handleResolve}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    <span>MARCAR COMO ATENDIDO</span>
-                  </button>
+              {selectedEmergency.status === 'en_camino' && (
+                <button
+                  type="button"
+                  onClick={handleResolve}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-3 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer uppercase tracking-wider"
+                >
+                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <span>FINALIZAR Y MARCAR COMO RESUELTO</span>
+                </button>
+              )}
 
+              {selectedEmergency.status === 'resuelto' && (
+                <div className="w-full bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    <span>CASO ATENDIDO Y RESUELTO</span>
+                  </span>
                   <button
                     type="button"
-                    onClick={() => handleDelete(selectedEmergency.id)}
-                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                    title="Descartar o quitar caso del radar"
+                    onClick={() => updateEmergencyStatus(selectedEmergency.id, 'critico')}
+                    className="text-[10px] text-emerald-700 underline font-semibold hover:text-emerald-900 cursor-pointer"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Quitar Caso</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <div className="w-full bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      <span>CASO ATENDIDO Y RESUELTO</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => updateEmergencyStatus(selectedEmergency.id, 'critico')}
-                      className="text-[10px] text-emerald-700 underline font-semibold hover:text-emerald-900 cursor-pointer"
-                    >
-                      Reabrir
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(selectedEmergency.id)}
-                    className="w-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-rose-600/20 cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>QUITAR / RETIRAR CASO DEL RADAR</span>
+                    Reabrir
                   </button>
                 </div>
               )}
+
+              <button
+                type="button"
+                onClick={() => handleDelete(selectedEmergency.id)}
+                className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                title="Descartar o quitar caso del radar"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Descartar / Quitar Caso del Radar</span>
+              </button>
             </div>
           </div>
         ) : (
