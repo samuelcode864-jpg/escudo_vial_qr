@@ -15,7 +15,7 @@ import ModalAfiliacion from './ModalAfiliacion';
 
 export default function MobileApp({ showSimulatorBar = false }) {
   const { sku: routeSku } = useParams();
-  const { activeSku, setActiveSku, qrList, currentQr: contextQr } = useApp();
+  const { activeSku, setActiveSku, qrList, currentQr: contextQr, emergencies } = useApp();
 
   // Estados de modales
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -37,6 +37,11 @@ export default function MobileApp({ showSimulatorBar = false }) {
 
   const isQrActive = currentQr?.status === 'active';
   const cleanSku = effectiveSku;
+
+  // Detectar incidente activo en curso para este sticker
+  const activeIncident = (emergencies || []).find(e => 
+    e.sku?.toUpperCase() === effectiveSku.toUpperCase() && e.status !== 'resuelto'
+  );
 
   return (
     <div className="w-full min-h-[100dvh] bg-gradient-to-b from-[#532C8C] via-[#4b2581] to-[#432172] text-slate-800 font-sans flex flex-col relative antialiased selection:bg-[#00A896] selection:text-white">
@@ -173,6 +178,44 @@ export default function MobileApp({ showSimulatorBar = false }) {
                   {cleanSku}
                 </span>
               </div>
+
+              {/* Banner de Auxilio Activo en Tiempo Real */}
+              {activeIncident && (
+                <div 
+                  onClick={() => setIsSosModalOpen(true)}
+                  className="w-full bg-gradient-to-r from-purple-950/95 via-slate-900/95 to-teal-950/95 border-2 border-teal-400/50 p-3.5 rounded-2xl shadow-xl flex items-center justify-between cursor-pointer transition-all active:scale-[0.98] group animate-in fade-in"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md ${
+                      activeIncident.status === 'en_camino' ? 'bg-[#00A896] animate-bounce' : 'bg-rose-600 animate-pulse'
+                    }`}>
+                      <span className="material-symbols-outlined text-[24px]">
+                        {activeIncident.status === 'en_camino' ? 'local_shipping' : 'sensors'}
+                      </span>
+                    </div>
+                    <div className="text-left">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-extrabold text-white text-[13px] tracking-tight">
+                          {activeIncident.status === 'en_camino' ? '¡Unidad en Camino!' : 'Alerta S.O.S Activa'}
+                        </span>
+                        <span className="font-mono text-[9.5px] bg-white/20 text-teal-200 font-bold px-1.5 py-0.2 rounded">
+                          {activeIncident.folio}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-teal-200/90 mt-0.5 font-medium leading-tight">
+                        {activeIncident.status === 'en_camino' 
+                          ? `Despachado: ${activeIncident.dispatchedUnit || 'Grúa Oficial'}` 
+                          : 'Torre 24/7 coordinando tu asistencia'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-teal-400/20 text-teal-300 px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold border border-teal-300/30 group-hover:bg-teal-400/30 transition-colors shrink-0">
+                    <span>Ver Estado</span>
+                    <span className="material-symbols-outlined text-[15px]">chevron_right</span>
+                  </div>
+                </div>
+              )}
 
               {/* Botón de Pánico Central S.O.S */}
               <SosHero onOpenSosModal={() => setIsSosModalOpen(true)} />

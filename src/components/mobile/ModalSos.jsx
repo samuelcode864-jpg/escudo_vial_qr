@@ -4,13 +4,20 @@ import { getDeviceLocation } from '../../utils/geoUtils';
 import confetti from 'canvas-confetti';
 
 export default function ModalSos({ isOpen, onClose }) {
-  const { activeSku, currentQr, triggerSos } = useApp();
+  const { activeSku, currentQr, triggerSos, emergencies } = useApp();
 
   const [selectedRole, setSelectedRole] = useState('titular');
   const [isSending, setIsSending] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [confirmedEmergency, setConfirmedEmergency] = useState(null);
   const [detectedGeo, setDetectedGeo] = useState(null);
+
+  // Obtener en tiempo real la emergencia activa vinculada a este folio o SKU
+  const liveEmergency = (emergencies || []).find(e => 
+    (confirmedEmergency?.id && e.id === confirmedEmergency.id) ||
+    (confirmedEmergency?.folio && e.folio === confirmedEmergency.folio) ||
+    (e.sku?.toUpperCase() === (activeSku || '').toUpperCase() && e.status !== 'resuelto')
+  ) || confirmedEmergency;
 
   // Al abrir el modal, resetear estado y capturar GPS en segundo plano
   useEffect(() => {
@@ -204,73 +211,191 @@ export default function ModalSos({ isOpen, onClose }) {
           </div>
         ) : (
           /* ======================================================== */
-          /* PANTALLA DE CONFIRMACIÓN ULTRA-GENIAL (REEMPLAZA EL ALERT) */
+          /* PANTALLA EN VIVO: SEGUIMIENTO EN TIEMPO REAL DEL DESPACHO */
           /* ======================================================== */
           <div className="w-full flex flex-col items-center animate-in zoom-in-95 duration-300">
-            {/* Animación de Baliza / Sirena Satelital */}
-            <div className="relative flex items-center justify-center my-3">
-              <span className="animate-ping absolute inline-flex h-20 w-20 rounded-full bg-emerald-400 opacity-40"></span>
-              <span className="animate-pulse absolute inline-flex h-16 w-16 rounded-full bg-emerald-300 opacity-60"></span>
-              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/40 border-2 border-white">
-                <span className="material-symbols-outlined text-[36px]" style={{ fontVariationSettings: '"FILL" 1' }}>
-                  check_circle
-                </span>
-              </div>
-            </div>
-
-            <h3 className="text-slate-900 font-extrabold text-[19px] tracking-tight uppercase leading-tight">
-              ¡Alerta S.O.S Despachada!
-            </h3>
-            <p className="text-slate-600 text-[12px] leading-snug mt-1 mb-3">
-              La Torre de Control 24/7 ha recibido tu señal y está coordinando el auxilio vial.
-            </p>
-
-            {/* Tarjeta de Detalles del Despacho */}
-            <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-left flex flex-col gap-2.5">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <span className="text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">Folio Oficial:</span>
-                <span className="font-mono text-[12px] font-black text-[#532C8C] bg-purple-100 px-2 py-0.5 rounded-md">
-                  {confirmedEmergency?.folio || '#SOS-VENEZUELA'}
-                </span>
-              </div>
-
-              <div className="flex items-start gap-2">
-                <span className="material-symbols-outlined text-[17px] text-[#00A896] shrink-0 mt-0.5">
-                  my_location
-                </span>
-                <div className="text-[11.5px] text-slate-700 leading-tight">
-                  <span className="font-bold text-slate-900 block">Ubicación Transmitida:</span>
-                  <span className="text-slate-600">{confirmedEmergency?.location?.address || 'Ubicación satelital en vivo'}</span>
+            {liveEmergency?.status === 'en_camino' ? (
+              /* ESTADO B: ¡UNIDAD EN CAMINO! (Aprobado y despachado por el operador) */
+              <>
+                {/* Animación de Unidad Móvil Despachada */}
+                <div className="relative flex items-center justify-center my-3">
+                  <span className="animate-ping absolute inline-flex h-20 w-20 rounded-full bg-teal-400 opacity-40"></span>
+                  <div className="relative w-18 h-18 rounded-3xl bg-gradient-to-tr from-[#00A896] via-teal-500 to-emerald-400 text-white flex items-center justify-center shadow-xl shadow-teal-500/30 border-2 border-white">
+                    <span className="material-symbols-outlined text-[38px] animate-bounce">
+                      local_shipping
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[17px] text-emerald-600 shrink-0">
-                  verified
-                </span>
-                <div className="text-[11.5px] text-slate-700">
-                  <span className="font-bold text-slate-900">Estado: </span>
-                  <span className="text-emerald-700 font-extrabold uppercase">Unidad en coordinación</span>
+                <div className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 text-[10.5px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider mb-1 border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>¡Unidad en Ruta hacia ti!</span>
                 </div>
-              </div>
-            </div>
+
+                <h3 className="text-slate-900 font-black text-[20px] tracking-tight uppercase leading-tight">
+                  ¡Auxilio Vial en Camino!
+                </h3>
+                <p className="text-slate-600 text-[12px] leading-snug mt-1 mb-3">
+                  La Torre de Control ha coordinado y despachado la unidad para brindarte asistencia inmediata.
+                </p>
+
+                {/* Línea de Progreso Activa */}
+                <div className="w-full grid grid-cols-3 gap-1 my-1">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold">✓</div>
+                    <span className="text-[9px] font-extrabold text-emerald-800 mt-1">Registrada</span>
+                  </div>
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold">✓</div>
+                    <span className="text-[9px] font-extrabold text-emerald-800 mt-1">Asignada</span>
+                  </div>
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-6 h-6 rounded-full bg-[#00A896] text-white flex items-center justify-center text-[11px] font-bold animate-pulse">🚗</div>
+                    <span className="text-[9px] font-extrabold text-teal-800 mt-1">En Ruta</span>
+                  </div>
+                </div>
+
+                {/* Tarjeta de Detalles del Despacho */}
+                <div className="w-full bg-teal-50/70 border border-teal-200 rounded-2xl p-3.5 text-left flex flex-col gap-2 mt-2">
+                  <div className="flex items-center justify-between border-b border-teal-200/60 pb-2">
+                    <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wider">Folio Oficial:</span>
+                    <span className="font-mono text-[12px] font-black text-[#532C8C] bg-white px-2 py-0.5 rounded-md border border-purple-200">
+                      {liveEmergency?.folio || confirmedEmergency?.folio || '#SOS-VENEZUELA'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-start gap-2 border-b border-teal-200/60 pb-2">
+                    <span className="material-symbols-outlined text-[18px] text-[#00A896] shrink-0 mt-0.5">
+                      tow_truck
+                    </span>
+                    <div className="text-[11.5px] leading-tight">
+                      <span className="font-bold text-slate-900 block">Recurso Despachado:</span>
+                      <span className="font-black text-teal-900 text-xs">
+                        {liveEmergency?.dispatchedUnit || 'Grúa Vial Oficial Escudo 24/7'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-rose-500 shrink-0 mt-0.5">
+                      location_on
+                    </span>
+                    <div className="text-[11.5px] leading-tight">
+                      <span className="font-bold text-slate-900 block">Punto de Encuentro:</span>
+                      <span className="text-slate-600 text-[11px]">{liveEmergency?.location?.address || 'Ubicación satelital transmitida'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Caja de Recomendación de Seguridad */}
+                <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl p-2.5 text-left flex items-center gap-2 mt-2 text-amber-900 text-[11px]">
+                  <span className="material-symbols-outlined text-amber-600 text-[20px] shrink-0">warning</span>
+                  <span>Enciende las luces intermitentes y mantente en un lugar seguro mientras llega la unidad.</span>
+                </div>
+              </>
+            ) : liveEmergency?.status === 'resuelto' ? (
+              /* ESTADO C: CASO RESUELTO */
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center my-3 border border-emerald-200 shadow-sm">
+                  <span className="material-symbols-outlined text-[36px]">check_circle</span>
+                </div>
+                <h3 className="text-slate-900 font-extrabold text-[19px] tracking-tight uppercase leading-tight">
+                  ¡Asistencia Finalizada!
+                </h3>
+                <p className="text-slate-600 text-[12px] leading-snug mt-1 mb-3">
+                  Tu auxilio vial ha sido atendido y marcado como resuelto por la Torre de Control. ¡Conduce con seguridad!
+                </p>
+              </>
+            ) : (
+              /* ESTADO A: ESPERANDO ASIGNACIÓN EN TORRE DE CONTROL (Radar en vivo) */
+              <>
+                {/* Animación de Radar Satelital Pulsante */}
+                <div className="relative flex items-center justify-center my-3">
+                  <span className="animate-ping absolute inline-flex h-24 w-24 rounded-full bg-purple-400 opacity-30"></span>
+                  <span className="animate-pulse absolute inline-flex h-16 w-16 rounded-full bg-teal-300 opacity-50"></span>
+                  <div className="relative w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#532C8C] to-[#00A896] text-white flex items-center justify-center shadow-xl shadow-purple-900/30 border-2 border-white">
+                    <span className="material-symbols-outlined text-[36px] animate-spin" style={{ animationDuration: '4s' }}>
+                      radar
+                    </span>
+                  </div>
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 bg-purple-100 text-[#532C8C] text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider mb-1 border border-purple-200">
+                  <span className="w-2 h-2 rounded-full bg-[#532C8C] animate-ping"></span>
+                  <span>Transmisión en Vivo a Torre 24/7</span>
+                </div>
+
+                <h3 className="text-slate-900 font-black text-[19px] tracking-tight uppercase leading-tight">
+                  ¡Alerta en Monitoreo!
+                </h3>
+                <p className="text-slate-600 text-[12px] leading-snug mt-1 mb-2">
+                  La Torre de Control 24/7 recibió tu señal. Un operador está coordinando la unidad más cercana.
+                </p>
+
+                {/* Barra de Fases en Espera */}
+                <div className="w-full grid grid-cols-3 gap-1 my-1">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold">✓</div>
+                    <span className="text-[9px] font-extrabold text-emerald-800 mt-1">Registrada</span>
+                  </div>
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-6 h-6 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center text-[11px] font-bold animate-pulse">⏳</div>
+                    <span className="text-[9px] font-extrabold text-amber-800 mt-1">Coordinando</span>
+                  </div>
+                  <div className="flex flex-col items-center text-center opacity-40">
+                    <div className="w-6 h-6 rounded-full bg-slate-300 text-slate-600 flex items-center justify-center text-[11px] font-bold">3</div>
+                    <span className="text-[9px] font-extrabold text-slate-500 mt-1">En Ruta</span>
+                  </div>
+                </div>
+
+                {/* Tarjeta de Datos en Espera */}
+                <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-left flex flex-col gap-2 mt-2">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Folio Oficial:</span>
+                    <span className="font-mono text-[12px] font-black text-[#532C8C] bg-purple-100 px-2 py-0.5 rounded-md">
+                      {liveEmergency?.folio || confirmedEmergency?.folio || '#SOS-VENEZUELA'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="material-symbols-outlined text-[17px] text-[#00A896] shrink-0 mt-0.5">
+                      my_location
+                    </span>
+                    <div className="text-[11.5px] text-slate-700 leading-tight">
+                      <span className="font-bold text-slate-900 block">Ubicación Satelital:</span>
+                      <span className="text-slate-600 text-[11px]">{liveEmergency?.location?.address || confirmedEmergency?.location?.address || 'Ubicación satelital transmitida'}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[17px] text-amber-500 shrink-0">
+                      hourglass_top
+                    </span>
+                    <div className="text-[11.5px]">
+                      <span className="font-bold text-slate-900">Estado: </span>
+                      <span className="text-amber-600 font-extrabold uppercase animate-pulse">Esperando asignación de unidad</span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Botón de Llamada Telefónica Directa de Emergencia */}
             <a
               href="tel:0800372836"
-              className="w-full mt-3.5 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-[12px] uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all"
+              className="w-full mt-3 bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-[12px] uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all"
             >
               <span className="material-symbols-outlined text-[17px] text-emerald-400">call</span>
               <span>Llamar Central Directo (0800-ESCUDO)</span>
             </a>
 
-            {/* Botón Entendido / Cerrar */}
+            {/* Botón Entendido / Mantener en Monitoreo */}
             <button
               type="button"
               onClick={handleClose}
               className="w-full mt-2 bg-[#00A896] hover:bg-[#008677] text-white py-3 rounded-xl font-bold text-[12.5px] uppercase tracking-wider shadow-sm cursor-pointer active:scale-95 transition-all"
             >
-              ENTENDIDO
+              {liveEmergency?.status === 'en_camino' ? 'ENTENDIDO / VER EN RUTA' : 'MANTENER EN ESPERA'}
             </button>
           </div>
         )}

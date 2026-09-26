@@ -670,6 +670,14 @@ export function AppProvider({ children }) {
           dispatchedUnit: unit || emg.dispatchedUnit,
           notes: updatedNotes
         };
+
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const dbEmg = mapEmergencyToDb(updated);
+            supabase.from('emergencies').upsert(dbEmg).catch(e => console.warn('Supabase emg status error:', e));
+          } catch {}
+        }
+
         syncServer('UPDATE_EMERGENCY', updated);
         return updated;
       }
