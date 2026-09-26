@@ -778,14 +778,18 @@ export function AppProvider({ children }) {
     }));
   };
 
-  const sendEmergencyChatMessage = (id, text, sender = 'central', senderName = '') => {
-    if (!id || !text || !text.trim()) return;
-    const cleanText = text.trim();
+  const sendEmergencyChatMessage = (id, text = '', sender = 'central', senderName = '', media = null) => {
+    if (!id) return;
+    const cleanText = (text || '').trim();
+    if (!cleanText && !media?.imageUrl && !media?.audioUrl) return;
+
     const newMsg = {
       id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       sender, // 'central' | 'usuario'
       senderName: senderName || (sender === 'central' ? 'Central de Monitoreo 24/7' : 'Conductor / Titular'),
       text: cleanText,
+      imageUrl: media?.imageUrl || null,
+      audioUrl: media?.audioUrl || null,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       createdAt: new Date().toISOString()
     };

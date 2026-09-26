@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { getDeviceLocation } from '../../utils/geoUtils';
+import { compressImageFile, createVoiceRecorder } from '../../utils/mediaUtils';
 import confetti from 'canvas-confetti';
 import { 
   ShieldAlert, 
@@ -20,7 +21,11 @@ import {
   MessageSquare,
   ArrowLeft,
   ChevronRight,
-  Shield
+  Shield,
+  Camera,
+  Mic,
+  Share2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export default function ModalSos({ isOpen, onClose }) {
@@ -40,6 +45,14 @@ export default function ModalSos({ isOpen, onClose }) {
   const [detectedGeo, setDetectedGeo] = useState(null);
   const [activeTab, setActiveTab] = useState('auxilio'); // 'auxilio' | 'chat'
   const [chatMessage, setChatMessage] = useState('');
+  
+  // Estados para foto y nota de voz
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const recorderRef = useRef(null);
+  const timerIntervalRef = useRef(null);
+  const fileInputRef = useRef(null);
   const chatScrollRef = useRef(null);
 
   // Obtener en tiempo real la emergencia activa vinculada a este folio o SKU
@@ -58,7 +71,7 @@ export default function ModalSos({ isOpen, onClose }) {
 
   // Filtrar notas válidas y no vacías
   const validNotes = (liveEmergency?.notes || []).filter(
-    n => n && typeof n.text === 'string' && n.text.trim().length > 0
+    n => n && ((typeof n.text === 'string' && n.text.trim().length > 0) || n.imageUrl || n.audioUrl)
   );
 
   // Contar mensajes del chat para badge
@@ -89,6 +102,8 @@ export default function ModalSos({ isOpen, onClose }) {
 
       setActiveTab('auxilio');
       setChatMessage('');
+      setIsRecording(false);
+      setRecordingSeconds(0);
 
       // Detección silenciosa de GPS
       getDeviceLocation()
@@ -176,11 +191,95 @@ export default function ModalSos({ isOpen, onClose }) {
     setChatMessage('');
   };
 
+  // Manejo de Nota de Voz
+  const handleStartRecording = async () => {
+    try {
+      const rec = await createVoiceRecorder();
+      recorderRef.current = rec;
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingSeconds(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      alert(err.message || 'No se pudo acceder al micrófono para la nota de voz');
+    }
+  };
+
+  const handleStopRecordingAndSend = async () => {
+    if (!recorderRef.current) return;
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    setIsRecording(false);
+    try {
+      setIsUploadingMedia(true);
+      const audioDataUrl = await recorderRef.current.stop();
+      recorderRef.current = null;
+      const senderName = currentQr?.holder?.name || (selectedRole === 'titular' ? 'Conductor Titular' : 'Testigo en Vía');
+      sendEmergencyChatMessage(
+        liveEmergency.id, 
+        '🎤 Nota de voz enviada', 
+        'usuario', 
+        senderName, 
+        { audioUrl: audioDataUrl }
+      );
+    } catch (err) {
+      console.warn('Error al guardar audio:', err);
+    } finally {
+      setIsUploadingMedia(false);
+      setRecordingSeconds(0);
+    }
+  };
+
+  const handleCancelRecording = () => {
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    if (recorderRef.current) {
+      recorderRef.current.cancel();
+      recorderRef.current = null;
+    }
+    setIsRecording(false);
+    setRecordingSeconds(0);
+  };
+
+  // Manejo de Fotos desde Cámara o Galería
+  const handleImageFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !liveEmergency?.id) return;
+    try {
+      setIsUploadingMedia(true);
+      const compressedDataUrl = await compressImageFile(file, 800, 800, 0.7);
+      const senderName = currentQr?.holder?.name || (selectedRole === 'titular' ? 'Conductor Titular' : 'Testigo en Vía');
+      sendEmergencyChatMessage(
+        liveEmergency.id, 
+        '📷 Foto de la emergencia adjuntada', 
+        'usuario', 
+        senderName, 
+        { imageUrl: compressedDataUrl }
+      );
+    } catch (err) {
+      alert('Error procesando la imagen. Intenta nuevamente.');
+    } finally {
+      setIsUploadingMedia(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleClose = () => {
     setIsConfirmed(false);
-    setConfirmedEmergency(null);
     onClose();
   };
+
+  // Enlace para compartir en WhatsApp con familiares
+  const shareMessageText = `🚨 *Aviso de Emergencia - Escudo Vial 24/7*
+Hola familia, tuve un percance con mi vehículo. Ya la Central de Monitoreo coordinó la asistencia.
+
+📋 *Folio de Asistencia:* ${liveEmergency?.folio || confirmedEmergency?.folio || '#SOS-VENEZUELA'}
+📍 *Punto de Encuentro:* ${liveEmergency?.location?.address || confirmedEmergency?.location?.address || 'Ubicación transmitida en vivo'}
+🚙 *Estado:* ${liveEmergency?.status === 'en_camino' ? '¡Unidad de Auxilio Vial en Ruta hacia mi posición!' : 'En proceso de coordinación 24/7'}
+
+📲 Pueden ver el estado en vivo y seguir el caso aquí:
+${window.location.origin}/v/${activeSku || 'EV8842VE'}`;
+
+  const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(shareMessageText)}`;
 
   return (
     <div 
@@ -418,11 +517,32 @@ export default function ModalSos({ isOpen, onClose }) {
                       </div>
                     </div>
 
+                    {/* NOVEDAD 1: Botón WhatsApp para Compartir con Familiares */}
+                    <a
+                      href={whatsappShareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full mt-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-white p-3 rounded-2xl flex items-center justify-between shadow-md shadow-emerald-600/20 active:scale-98 transition-all cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5 text-left">
+                        <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white">
+                          <Share2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="font-black text-xs block">Compartir con mis Familiares</span>
+                          <span className="text-[10px] text-white/90 font-medium">Avisar por WhatsApp con enlace de seguimiento</span>
+                        </div>
+                      </div>
+                      <span className="bg-white text-[#25D366] text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs">
+                        WhatsApp
+                      </span>
+                    </a>
+
                     {/* Banner Llamativo para Abrir el Chat Directo */}
                     <button
                       type="button"
                       onClick={() => setActiveTab('chat')}
-                      className="w-full mt-2.5 bg-gradient-to-r from-[#532C8C] via-purple-800 to-[#532C8C] text-white p-3 rounded-2xl flex items-center justify-between shadow-md active:scale-98 transition-all cursor-pointer"
+                      className="w-full mt-2 bg-gradient-to-r from-[#532C8C] via-purple-800 to-[#532C8C] text-white p-3 rounded-2xl flex items-center justify-between shadow-md active:scale-98 transition-all cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5 text-left">
                         <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-teal-300">
@@ -430,7 +550,7 @@ export default function ModalSos({ isOpen, onClose }) {
                         </div>
                         <div>
                           <span className="font-black text-xs block">Abrir Chat con el Operador</span>
-                          <span className="text-[10px] text-teal-300 font-semibold">Toca aquí para escribir a la central</span>
+                          <span className="text-[10px] text-teal-300 font-semibold">Fotos, notas de voz y mensajes</span>
                         </div>
                       </div>
                       <ChevronRight className="w-5 h-5 text-white/80" />
@@ -477,6 +597,17 @@ export default function ModalSos({ isOpen, onClose }) {
                       La Torre de Control 24/7 recibió tu señal. Un operador está coordinando la unidad más cercana.
                     </p>
 
+                    {/* Compartir por WhatsApp mientras espera */}
+                    <a
+                      href={whatsappShareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full mt-2 bg-[#25D366] hover:bg-[#20bd5a] text-white p-2.5 rounded-2xl flex items-center justify-center gap-2 shadow-sm font-extrabold text-xs"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span>Avisar a Familiares por WhatsApp</span>
+                    </a>
+
                     {/* Botón de Chat mientras espera */}
                     <button
                       type="button"
@@ -489,7 +620,7 @@ export default function ModalSos({ isOpen, onClose }) {
                         </div>
                         <div>
                           <span className="font-black text-xs block">Escribir a la Central</span>
-                          <span className="text-[10px] text-teal-300 font-semibold">Informa detalles o pide asistencia</span>
+                          <span className="text-[10px] text-teal-300 font-semibold">Envía fotos o notas de voz</span>
                         </div>
                       </div>
                       <ChevronRight className="w-5 h-5 text-white/80" />
@@ -516,11 +647,11 @@ export default function ModalSos({ isOpen, onClose }) {
                 </button>
               </div>
             ) : (
-              /* VISTA 2: PANTALLA COMPLETA DE CHAT PROFESIONAL (ESTILO WHATSAPP/UBER) */
+              /* VISTA 2: PANTALLA COMPLETA DE CHAT PROFESIONAL CON FOTOS Y NOTAS DE VOZ */
               <div className="w-full flex-1 flex flex-col justify-between overflow-hidden bg-slate-50/80 rounded-2xl border border-slate-200 text-left">
                 
                 {/* Cabecera del Chat */}
-                <div className="bg-[#532C8C] text-white px-3.5 py-2.5 flex items-center justify-between shadow-xs">
+                <div className="bg-[#532C8C] text-white px-3.5 py-2.5 flex items-center justify-between shadow-xs shrink-0">
                   <div className="flex items-center gap-2.5">
                     <button
                       type="button"
@@ -549,7 +680,7 @@ export default function ModalSos({ isOpen, onClose }) {
                   </span>
                 </div>
 
-                {/* Área de Mensajes */}
+                {/* Área de Mensajes con Fotos y Notas de Voz */}
                 <div 
                   ref={chatScrollRef}
                   className="flex-1 p-3 overflow-y-auto space-y-2.5 max-h-[46vh] min-h-[220px]"
@@ -557,16 +688,16 @@ export default function ModalSos({ isOpen, onClose }) {
                   {validNotes.length === 0 ? (
                     <div className="text-center text-slate-400 text-xs py-8 italic flex flex-col items-center gap-2">
                       <MessageSquare className="w-8 h-8 text-slate-300" />
-                      <span>Canal seguro abierto. Escribe un mensaje o presiona una respuesta rápida abajo.</span>
+                      <span>Canal seguro abierto. Envía un mensaje, foto de la avería o nota de voz.</span>
                     </div>
                   ) : (
                     validNotes.map((msg, idx) => {
                       const isUser = msg.sender === 'usuario';
                       const isExplicitCentral = msg.sender === 'central';
                       const isSystem = !msg.sender && (
-                        msg.text.includes('Alerta S.O.S') || 
-                        msg.text.includes('Unidad despachada') || 
-                        msg.text.includes('marcada como resuelta')
+                        msg.text?.includes('Alerta S.O.S') || 
+                        msg.text?.includes('Unidad despachada') || 
+                        msg.text?.includes('marcada como resuelta')
                       );
                       const isCentral = isExplicitCentral || (!isUser && !isSystem);
 
@@ -586,7 +717,26 @@ export default function ModalSos({ isOpen, onClose }) {
                         return (
                           <div key={msg.id || idx} className="flex flex-col items-end">
                             <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-2xl rounded-tr-xs px-3.5 py-2 max-w-[85%] shadow-xs text-xs leading-relaxed font-medium">
-                              {msg.text}
+                              {msg.text && <div>{msg.text}</div>}
+
+                              {/* Foto Adjunta */}
+                              {msg.imageUrl && (
+                                <div className="mt-1.5">
+                                  <img 
+                                    src={msg.imageUrl} 
+                                    alt="Foto en vía" 
+                                    className="rounded-xl max-h-44 w-auto object-cover border border-white/20 shadow-xs cursor-pointer hover:opacity-95"
+                                    onClick={() => window.open(msg.imageUrl, '_blank')}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Nota de Voz */}
+                              {msg.audioUrl && (
+                                <div className="mt-1.5 pt-1 border-t border-white/20">
+                                  <audio controls src={msg.audioUrl} className="h-8 max-w-[190px]" />
+                                </div>
+                              )}
                             </div>
                             <span className="text-[9.5px] text-slate-400 font-semibold mt-0.5 px-1">
                               {msg.time || 'Ahora'} • Tú
@@ -603,7 +753,26 @@ export default function ModalSos({ isOpen, onClose }) {
                             <span>Central 24/7 • {msg.time || 'Ahora'}</span>
                           </div>
                           <div className="bg-white text-slate-900 border border-slate-200 rounded-2xl rounded-tl-xs px-3.5 py-2 max-w-[85%] shadow-xs text-xs leading-relaxed font-medium">
-                            {msg.text}
+                            {msg.text && <div>{msg.text}</div>}
+
+                            {/* Foto Adjunta de la Central */}
+                            {msg.imageUrl && (
+                              <div className="mt-1.5">
+                                <img 
+                                  src={msg.imageUrl} 
+                                  alt="Foto central" 
+                                  className="rounded-xl max-h-44 w-auto object-cover border border-slate-200 shadow-xs cursor-pointer hover:opacity-95"
+                                  onClick={() => window.open(msg.imageUrl, '_blank')}
+                                />
+                              </div>
+                            )}
+
+                            {/* Nota de Voz de la Central */}
+                            {msg.audioUrl && (
+                              <div className="mt-1.5 pt-1 border-t border-slate-100">
+                                <audio controls src={msg.audioUrl} className="h-8 max-w-[190px]" />
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -612,7 +781,7 @@ export default function ModalSos({ isOpen, onClose }) {
                 </div>
 
                 {/* Barra de Respuestas Rápidas */}
-                <div className="bg-white/90 border-t border-slate-200 p-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <div className="bg-white/90 border-t border-slate-200 p-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
                   {[
                     '📍 Estoy orillado a la derecha',
                     '⚠️ Intermitentes encendidas',
@@ -630,29 +799,95 @@ export default function ModalSos({ isOpen, onClose }) {
                   ))}
                 </div>
 
-                {/* Caja de Redacción de Mensaje */}
+                {/* NOVEDAD 2: Caja de Redacción con Soporte para Fotos y Notas de Voz */}
                 <form 
                   onSubmit={(e) => {
                     e.preventDefault();
                     handleSendMessage();
                   }}
-                  className="bg-white p-2 border-t border-slate-200 flex items-center gap-2"
+                  className="bg-white p-2 border-t border-slate-200 flex items-center gap-1.5 shrink-0"
                 >
+                  {/* Input de archivo oculto para fotos */}
                   <input 
-                    type="text"
-                    value={chatMessage}
-                    onChange={(e) => setChatMessage(e.target.value)}
-                    placeholder="Escribe un mensaje a la central..."
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#00A896] focus:bg-white transition-all"
+                    type="file" 
+                    ref={fileInputRef} 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleImageFileChange} 
                   />
+
+                  {/* Botón de Cámara para enviar Foto */}
                   <button
-                    type="submit"
-                    disabled={!chatMessage.trim()}
-                    className="bg-[#00A896] hover:bg-[#008677] disabled:opacity-40 text-white p-2.5 rounded-xl transition-all cursor-pointer shadow-md active:scale-95"
-                    title="Enviar mensaje"
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingMedia || isRecording}
+                    className="text-slate-500 hover:text-[#00A896] p-2 rounded-xl transition-all cursor-pointer active:scale-95 disabled:opacity-40"
+                    title="Tomar o adjuntar foto del choque o falla"
                   >
-                    <Send className="w-4 h-4" />
+                    <Camera className="w-5 h-5" />
                   </button>
+
+                  {/* Estado de Grabación de Audio */}
+                  {isRecording ? (
+                    <div className="flex-1 flex items-center justify-between bg-rose-50 border border-rose-200 rounded-xl px-3 py-1.5 animate-pulse">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping"></span>
+                        <span className="text-xs font-bold text-rose-700 font-mono">
+                          00:{recordingSeconds < 10 ? `0${recordingSeconds}` : recordingSeconds} Grabando...
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handleCancelRecording}
+                          className="text-slate-500 hover:text-slate-700 px-2 py-1 text-xs font-bold cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleStopRecordingAndSend}
+                          className="bg-rose-600 text-white px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm cursor-pointer"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Enviar</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Campo de Texto */}
+                      <input 
+                        type="text"
+                        value={chatMessage}
+                        onChange={(e) => setChatMessage(e.target.value)}
+                        placeholder={isUploadingMedia ? "Comprimiendo archivo..." : "Escribe a la central..."}
+                        disabled={isUploadingMedia}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#00A896] focus:bg-white transition-all"
+                      />
+
+                      {/* Botón de Micrófono para Nota de Voz */}
+                      <button
+                        type="button"
+                        onClick={handleStartRecording}
+                        disabled={isUploadingMedia}
+                        className="text-slate-500 hover:text-rose-600 p-2 rounded-xl transition-all cursor-pointer active:scale-95 disabled:opacity-40"
+                        title="Grabar nota de voz"
+                      >
+                        <Mic className="w-5 h-5" />
+                      </button>
+
+                      {/* Botón Enviar Texto */}
+                      <button
+                        type="submit"
+                        disabled={!chatMessage.trim() || isUploadingMedia}
+                        className="bg-[#00A896] hover:bg-[#008677] disabled:opacity-40 text-white p-2.5 rounded-xl transition-all cursor-pointer shadow-md active:scale-95"
+                        title="Enviar mensaje"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </form>
               </div>
             )}

@@ -392,7 +392,22 @@ export default function LiveRadarView({
                               : 'bg-white text-slate-900 border border-teal-200 rounded-tl-none font-medium'
                           }`}
                         >
-                          {msg.text}
+                          {msg.text && <div>{msg.text}</div>}
+                          {msg.imageUrl && (
+                            <div className="mt-1.5">
+                              <img 
+                                src={msg.imageUrl} 
+                                alt="Foto enviada" 
+                                className="rounded-lg max-h-48 w-auto object-cover border border-slate-200 cursor-pointer shadow-xs hover:opacity-95" 
+                                onClick={() => window.open(msg.imageUrl, '_blank')}
+                              />
+                            </div>
+                          )}
+                          {msg.audioUrl && (
+                            <div className="mt-1.5 pt-1 border-t border-slate-200/50">
+                              <audio controls src={msg.audioUrl} className="h-8 max-w-[210px]" />
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
