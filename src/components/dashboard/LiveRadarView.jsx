@@ -21,7 +21,10 @@ import {
   Send,
   X,
   Download,
-  ZoomIn
+  ZoomIn,
+  Radio,
+  FileText,
+  Sparkles
 } from 'lucide-react';
 
 export default function LiveRadarView({ 
@@ -40,6 +43,8 @@ export default function LiveRadarView({
   
   const [radarFilter, setRadarFilter] = useState('activas'); // 'activas' | 'todas'
   const [localSelectedId, setLocalSelectedId] = useState(emergencies[0]?.id || null);
+  const [rightColTab, setRightColTab] = useState('chat'); // 'chat' | 'ficha'
+  const [lastReadCounts, setLastReadCounts] = useState({});
   const [newNoteText, setNewNoteText] = useState('');
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
   const chatScrollRef = useRef(null);
@@ -104,6 +109,24 @@ export default function LiveRadarView({
       setSelectedEmergencyId(null);
     }
   };
+
+  // Control de alertas visuales y mensajes no leídos del conductor
+  const notesCount = selectedEmergency?.notes?.length || 0;
+  const lastRead = selectedEmergency ? (lastReadCounts[selectedEmergency.id] ?? notesCount) : 0;
+  const hasUnread = notesCount > lastRead;
+  const lastMsg = selectedEmergency?.notes?.[notesCount - 1];
+  const isLastFromDriver = lastMsg && lastMsg.sender === 'usuario';
+  const showGlowAlert = hasUnread && isLastFromDriver;
+
+  // Marcar como leído cuando el operador está en la pestaña de chat
+  useEffect(() => {
+    if (selectedEmergency && rightColTab === 'chat') {
+      setLastReadCounts(prev => ({
+        ...prev,
+        [selectedEmergency.id]: selectedEmergency.notes?.length || 0
+      }));
+    }
+  }, [selectedEmergency?.id, selectedEmergency?.notes?.length, rightColTab]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-4">
@@ -209,10 +232,12 @@ export default function LiveRadarView({
         </div>
       </div>
 
-      {/* Columna Derecha: Tarjeta de Despacho Operativo (5 Columnas en Desktop) */}
+      {/* Columna Derecha: Tarjeta de Despacho Operativo & Consola Táctica (5 Columnas en Desktop) */}
       <div className="lg:col-span-5 flex flex-col gap-4">
         {selectedEmergency ? (
-          <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-lg flex flex-col gap-4 animate-in fade-in">
+          <div className={`bg-white rounded-3xl p-5 border transition-all duration-300 shadow-xl flex flex-col gap-3.5 animate-in fade-in ${
+            showGlowAlert ? 'border-emerald-500 ring-4 ring-emerald-500/20 shadow-emerald-500/20' : 'border-slate-200'
+          }`}>
             {/* Header del Caso */}
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
@@ -245,50 +270,55 @@ export default function LiveRadarView({
               </div>
             </div>
 
-            {/* Ficha del Afectado y Vehículo */}
-            <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80 space-y-2.5 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-                <span className="text-slate-500 font-bold uppercase text-[10px]">Titular Registrado</span>
-                <span className="font-extrabold text-slate-800 text-[13px]">{selectedEmergency.holderName}</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 border-b border-slate-200/60 pb-2">
-                <div>
-                  <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Cédula</span>
-                  <span className="font-semibold text-slate-800">{selectedEmergency.cedula}</span>
+            {/* Pestañas de Navegación del Panel: Chat Táctico vs Ficha & Vehículo */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setRightColTab('chat')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer relative ${
+                  rightColTab === 'chat'
+                    ? 'bg-slate-950 text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <div className="relative flex items-center gap-1.5">
+                  <Radio className={`w-3.5 h-3.5 ${rightColTab === 'chat' ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <span>CONSOLA CHAT TÁCTICO</span>
+                  {showGlowAlert && (
+                    <span className="flex h-2.5 w-2.5 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Reportante</span>
-                  <span className={`font-bold capitalize ${
-                    selectedEmergency.reporterType === 'titular' ? 'text-teal-700' : 'text-purple-700'
+                {selectedEmergency.notes?.length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-mono ${
+                    rightColTab === 'chat' ? 'bg-slate-800 text-emerald-400 border border-slate-700' : 'bg-slate-200 text-slate-700'
                   }`}>
-                    {selectedEmergency.reporterType === 'titular' ? '👤 Titular' : '👥 Tercero / Testigo'}
+                    {selectedEmergency.notes.length}
                   </span>
-                </div>
-              </div>
+                )}
+              </button>
 
-              <div className="border-b border-slate-200/60 pb-2">
-                <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Vehículo / Placa</span>
-                <div className="flex items-center gap-1.5 font-semibold text-slate-800 mt-0.5">
-                  <Car className="w-3.5 h-3.5 text-[#532C8C]" />
-                  <span>{selectedEmergency.vehicle || 'Vehículo en vía'}</span>
-                </div>
-              </div>
-
-              <div>
-                <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Ubicación GPS</span>
-                <div className="flex items-start gap-1 text-slate-700 font-medium mt-0.5">
-                  <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-                  <span>{selectedEmergency.location.address}</span>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => setRightColTab('ficha')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                  rightColTab === 'ficha'
+                    ? 'bg-[#532C8C] text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>FICHA & VEHÍCULO</span>
+              </button>
             </div>
 
-            {/* Acciones de Contacto Rápido a 1 Clic */}
+            {/* Acciones Rápidas de Contacto Telefónico y WhatsApp (Siempre visibles) */}
             <div className="grid grid-cols-2 gap-2">
               <a
                 href={`tel:${selectedEmergency.phone}`}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-emerald-700/20"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-emerald-700/20"
               >
                 <Phone className="w-3.5 h-3.5" />
                 <span>Llamar al Usuario</span>
@@ -298,7 +328,7 @@ export default function LiveRadarView({
                 href={`https://wa.me/${selectedEmergency.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${selectedEmergency.holderName}, nos comunicamos desde la Central de Monitoreo de Escudo Vial con respecto a tu alerta ${selectedEmergency.folio}.`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-[#00A896] hover:bg-[#008677] text-white font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-teal-700/20"
+                className="bg-[#00A896] hover:bg-[#008677] text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-teal-700/20"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>WhatsApp Directo</span>
@@ -306,28 +336,28 @@ export default function LiveRadarView({
             </div>
 
             {/* Botón de Acción Principal de la Torre de Control */}
-            <div className="flex flex-col gap-2">
+            <div>
               {selectedEmergency.status === 'critico' ? (
                 <button
                   type="button"
                   onClick={() => handleDispatch('Unidad de Auxilio Vial')}
-                  className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:brightness-110 active:scale-[0.98] text-white font-black text-sm py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-600/30 cursor-pointer uppercase tracking-wider"
+                  className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:brightness-110 active:scale-[0.98] text-white font-black text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/30 cursor-pointer uppercase tracking-wider"
                 >
-                  <CheckCircle className="w-5 h-5 text-white" />
+                  <CheckCircle className="w-4 h-4 text-white" />
                   <span>ACEPTAR Y ATENDER EMERGENCIA</span>
                 </button>
               ) : selectedEmergency.status === 'en_camino' ? (
-                <div className="bg-teal-50 border border-teal-200 rounded-2xl p-3 flex items-center justify-between text-xs text-teal-900 font-extrabold">
+                <div className="bg-teal-50 border border-teal-200 rounded-xl p-2.5 flex items-center justify-between text-xs text-teal-900 font-extrabold">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-teal-500 animate-ping"></span>
                     <span>¡EMERGENCIA ACEPTADA Y EN ATENCIÓN!</span>
                   </div>
-                  <span className="bg-teal-200/80 text-teal-800 text-[10px] px-2 py-0.5 rounded-md uppercase">
+                  <span className="bg-teal-200/80 text-teal-800 text-[10px] px-2 py-0.5 rounded-md uppercase font-bold">
                     En Curso
                   </span>
                 </div>
               ) : (
-                <div className="bg-slate-100 border border-slate-200 rounded-2xl p-3 flex items-center justify-between text-xs text-slate-700 font-bold">
+                <div className="bg-slate-100 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between text-xs text-slate-700 font-bold">
                   <span>Asistencia solventada y cerrada</span>
                   <span className="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded-md uppercase">
                     Resuelto
@@ -336,128 +366,211 @@ export default function LiveRadarView({
               )}
             </div>
 
-            {/* Chat Táctico y Bitácora en Vivo con el Conductor */}
-            <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200 flex flex-col gap-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-[11px] font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1">
-                    <MessageSquare className="w-3.5 h-3.5 text-[#532C8C]" />
-                    Chat Táctico en Vivo con Conductor
+            {/* Contenido según la pestaña activa: Chat Táctico o Ficha Técnica */}
+            {rightColTab === 'ficha' ? (
+              /* Ficha Completa del Afectado y Vehículo */
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3 text-xs animate-in fade-in">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                  <span className="text-slate-500 font-bold uppercase text-[10px]">Titular Registrado</span>
+                  <span className="font-extrabold text-slate-900 text-sm">{selectedEmergency.holderName}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 border-b border-slate-200/60 pb-2">
+                  <div>
+                    <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Cédula</span>
+                    <span className="font-semibold text-slate-800">{selectedEmergency.cedula}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Reportante</span>
+                    <span className={`font-bold capitalize ${
+                      selectedEmergency.reporterType === 'titular' ? 'text-teal-700' : 'text-purple-700'
+                    }`}>
+                      {selectedEmergency.reporterType === 'titular' ? '👤 Titular' : '👥 Tercero / Testigo'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="border-b border-slate-200/60 pb-2">
+                  <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Vehículo / Placa</span>
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-800 mt-0.5">
+                    <Car className="w-3.5 h-3.5 text-[#532C8C]" />
+                    <span>{selectedEmergency.vehicle || 'Vehículo en vía'}</span>
+                  </div>
+                </div>
+
+                <div className="border-b border-slate-200/60 pb-2">
+                  <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Teléfono de Contacto</span>
+                  <span className="font-semibold text-slate-800">{selectedEmergency.phone}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 font-bold uppercase text-[9.5px] block">Ubicación GPS</span>
+                  <div className="flex items-start gap-1 text-slate-700 font-medium mt-0.5">
+                    <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                    <span>{selectedEmergency.location.address}</span>
+                  </div>
+                  {selectedEmergency.location.lat && selectedEmergency.location.lng && (
+                    <a
+                      href={`https://www.google.com/maps?q=${selectedEmergency.location.lat},${selectedEmergency.location.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-teal-700 hover:text-teal-800 font-bold mt-1.5"
+                    >
+                      <Navigation className="w-3 h-3" />
+                      <span>Abrir coordenadas en Google Maps</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Consola Táctica de Chat Oscura (Dark Command HUD) */
+              <div className="bg-slate-950 rounded-2xl p-3.5 border border-slate-800 flex flex-col gap-2.5 shadow-2xl animate-in fade-in">
+                {/* Cabecera Táctica del Chat HUD */}
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <div>
+                      <div className="text-[11px] font-black text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                        <span>ENLACE RADIAL TÁCTICO 24/7</span>
+                      </div>
+                      <div className="text-[9.5px] text-slate-400 font-medium flex items-center gap-1">
+                        <span>Conectado con:</span>
+                        <strong className="text-white">{selectedEmergency.holderName}</strong>
+                        <span>•</span>
+                        <span>{selectedEmergency.vehicle || 'Vehículo'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[9.5px] font-extrabold text-teal-300 bg-teal-950/80 px-2 py-0.5 rounded-md border border-teal-800 font-mono tracking-wider">
+                    EN VIVO
                   </span>
                 </div>
-                <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
-                  Canal Directo 24/7
-                </span>
-              </div>
-              
-              {/* Contenedor de Mensajes con Scroll */}
-              <div 
-                ref={chatScrollRef}
-                className="space-y-2 max-h-40 overflow-y-auto pr-1 text-xs"
-              >
-                {(!selectedEmergency.notes || selectedEmergency.notes.length === 0) ? (
-                  <div className="text-center text-slate-400 text-[11px] py-3 italic">
-                    Sin mensajes aún. Escribe o usa las respuestas rápidas para comunicarte con el conductor.
-                  </div>
-                ) : (
-                  selectedEmergency.notes.map((msg, i) => {
-                    const isUser = msg.sender === 'usuario';
-                    const isCentral = msg.sender === 'central';
 
-                    if (!isUser && !isCentral) {
-                      // Mensaje o evento del sistema
+                {/* Contenedor de Mensajes con Scroll Ampliado */}
+                <div 
+                  ref={chatScrollRef}
+                  className="space-y-2.5 h-[340px] overflow-y-auto pr-1 text-xs select-text"
+                >
+                  {(!selectedEmergency.notes || selectedEmergency.notes.length === 0) ? (
+                    <div className="text-center py-10 flex flex-col items-center justify-center gap-2">
+                      <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400">
+                        <Radio className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <p className="text-slate-400 text-xs font-semibold">Canal de Transmisión Activo</p>
+                      <p className="text-slate-500 text-[11px] max-w-xs leading-relaxed">
+                        El conductor puede enviar mensajes, fotos del vehículo y audios desde su teléfono. Escribe una respuesta o usa los botones rápidos abajo.
+                      </p>
+                    </div>
+                  ) : (
+                    selectedEmergency.notes.map((msg, i) => {
+                      const isUser = msg.sender === 'usuario';
+                      const isCentral = msg.sender === 'central';
+
+                      if (!isUser && !isCentral) {
+                        return (
+                          <div key={msg.id || i} className="text-center my-1.5">
+                            <span className="bg-slate-900 border border-slate-800 text-slate-400 text-[9.5px] px-2.5 py-0.5 rounded-full inline-block font-mono">
+                              {msg.text}
+                            </span>
+                          </div>
+                        );
+                      }
+
                       return (
-                        <div key={msg.id || i} className="text-center my-1">
-                          <span className="bg-slate-200/80 text-slate-600 text-[9.5px] px-2 py-0.5 rounded-full inline-block font-medium">
-                            {msg.text}
-                          </span>
+                        <div 
+                          key={msg.id || i} 
+                          className={`flex flex-col ${isCentral ? 'items-end' : 'items-start'}`}
+                        >
+                          <div className="text-[9.5px] text-slate-400 font-semibold mb-1 px-1 flex items-center gap-1.5 font-mono">
+                            <span className={isCentral ? 'text-purple-300 font-bold' : 'text-emerald-400 font-bold'}>
+                              {isCentral ? '🛡️ CENTRAL (TÚ)' : '📱 CONDUCTOR EN RUTA'}
+                            </span>
+                            <span className="text-slate-600">•</span>
+                            <span>{msg.time}</span>
+                          </div>
+                          <div 
+                            className={`px-3.5 py-2 rounded-2xl max-w-[88%] text-xs shadow-md leading-relaxed ${
+                              isCentral 
+                                ? 'bg-gradient-to-r from-[#532C8C] to-[#6b38b4] text-white border border-purple-400/40 rounded-tr-xs' 
+                                : 'bg-emerald-950/80 text-emerald-100 border border-emerald-500/50 rounded-tl-xs font-medium'
+                            }`}
+                          >
+                            {msg.text && <div className="break-words">{msg.text}</div>}
+                            {msg.imageUrl && (
+                              <div className="mt-2 relative group cursor-pointer" onClick={() => setPreviewImageUrl(msg.imageUrl)}>
+                                <img 
+                                  src={msg.imageUrl} 
+                                  alt="Foto enviada" 
+                                  className="rounded-xl max-h-48 w-auto object-cover border border-emerald-500/40 shadow-md hover:brightness-110 transition-all" 
+                                />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center text-white transition-opacity backdrop-blur-2xs">
+                                  <ZoomIn className="w-6 h-6 drop-shadow-md text-emerald-300" />
+                                </div>
+                              </div>
+                            )}
+                            {msg.audioUrl && (
+                              <div className="mt-2 pt-1 border-t border-slate-700/50">
+                                <audio controls src={msg.audioUrl} className="h-8 max-w-[210px] filter invert brightness-90" />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
-                    }
+                    })
+                  )}
+                </div>
 
-                    return (
-                      <div 
-                        key={msg.id || i} 
-                        className={`flex flex-col ${isCentral ? 'items-end' : 'items-start'}`}
+                {/* Botones de Respuestas Rápidas Tácticas para el Operador */}
+                <div className="pt-2 border-t border-slate-800/80">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1 flex items-center gap-1 font-mono">
+                    <Sparkles className="w-3 h-3 text-emerald-400" />
+                    <span>Despacho Rápido Táctico:</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    {[
+                      '🚙 Grúa en ruta hacia tu posición (8-10 min)',
+                      '⚠️ Enciende intermitentes y mantén la calma',
+                      '📞 Te estamos llamando a tu número celular',
+                      '🚨 Patrulla y paramédicos notificados',
+                      '📸 Envíanos una foto del daño para la aseguradora'
+                    ].map((chip, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSendChatMessage(chip)}
+                        className="bg-slate-900 hover:bg-emerald-950/80 border border-slate-800 hover:border-emerald-500/60 text-slate-300 hover:text-emerald-200 text-[10.5px] px-2.5 py-1 rounded-lg whitespace-nowrap font-medium transition-all shadow-xs active:scale-95 cursor-pointer shrink-0"
                       >
-                        <div className="text-[9.5px] text-slate-400 font-semibold mb-0.5 px-1 flex items-center gap-1">
-                          <span>{isCentral ? '🛡️ Tú (Central)' : '📱 Conductor'}</span>
-                          <span>•</span>
-                          <span>{msg.time}</span>
-                        </div>
-                        <div 
-                          className={`px-3 py-1.5 rounded-xl max-w-[85%] text-xs shadow-2xs leading-relaxed ${
-                            isCentral 
-                              ? 'bg-[#532C8C] text-white rounded-tr-none' 
-                              : 'bg-white text-slate-900 border border-teal-200 rounded-tl-none font-medium'
-                          }`}
-                        >
-                          {msg.text && <div>{msg.text}</div>}
-                          {msg.imageUrl && (
-                            <div className="mt-1.5 relative group cursor-pointer" onClick={() => setPreviewImageUrl(msg.imageUrl)}>
-                              <img 
-                                src={msg.imageUrl} 
-                                alt="Foto enviada" 
-                                className="rounded-lg max-h-48 w-auto object-cover border border-slate-200 shadow-xs hover:brightness-95 transition-all" 
-                              />
-                              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center text-white transition-opacity">
-                                <ZoomIn className="w-6 h-6 drop-shadow-md" />
-                              </div>
-                            </div>
-                          )}
-                          {msg.audioUrl && (
-                            <div className="mt-1.5 pt-1 border-t border-slate-200/50">
-                              <audio controls src={msg.audioUrl} className="h-8 max-w-[210px]" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              {/* Botones de Respuestas Rápidas para el Operador */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                {[
-                  'Unidad de auxilio en ruta, tiempo estimado 10 min.',
-                  'Permanece en un lugar seguro con intermitentes.',
-                  'Te llamaremos al teléfono para mayor referencia.'
-                ].map((chip, idx) => (
+                {/* Input de redacción de mensaje */}
+                <form onSubmit={handleAddNote} className="flex items-center gap-1.5 mt-1">
+                  <input
+                    type="text"
+                    value={newNoteText}
+                    onChange={(e) => setNewNoteText(e.target.value)}
+                    placeholder="Escribir mensaje directo al teléfono del usuario..."
+                    className="flex-1 bg-slate-900 border border-slate-700 focus:border-emerald-400 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-400 shadow-inner"
+                  />
                   <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSendChatMessage(chip)}
-                    className="bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 text-slate-700 text-[10px] px-2 py-0.5 rounded-lg whitespace-nowrap font-medium transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
+                    type="submit"
+                    disabled={!newNoteText.trim()}
+                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-3.5 py-2.5 rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-900/40 active:scale-95 flex items-center gap-1 font-bold text-xs"
+                    title="Enviar mensaje al conductor"
                   >
-                    {chip}
+                    <span>Enviar</span>
+                    <Send className="w-3.5 h-3.5" />
                   </button>
-                ))}
+                </form>
               </div>
-
-              {/* Input para redactar mensaje al conductor */}
-              <form onSubmit={handleAddNote} className="flex items-center gap-1.5 mt-0.5">
-                <input
-                  type="text"
-                  value={newNoteText}
-                  onChange={(e) => setNewNoteText(e.target.value)}
-                  placeholder="Escribir mensaje directo al teléfono del usuario..."
-                  className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#532C8C] shadow-inner"
-                />
-                <button
-                  type="submit"
-                  disabled={!newNoteText.trim()}
-                  className="bg-[#532C8C] hover:bg-purple-800 disabled:opacity-40 text-white p-2 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
-                  title="Enviar mensaje al conductor"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </form>
-            </div>
+            )}
 
             {/* Acciones de Cierre / Retiro del Caso */}
             <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
