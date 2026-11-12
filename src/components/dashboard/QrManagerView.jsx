@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
-  createStickerCanvas, 
-  exportBatchToZip, 
-  exportBatchToPdf,
-  generateQrPng
-} from '../../utils/qrGenerator';
+  renderOfficialStickerToCanvas,
+  exportOfficialStickerSvg,
+  exportOfficialStickerPdf,
+  exportBatchOfficialZip,
+  exportBatchOfficialPliegoPdf
+} from '../../utils/officialStickerGenerator';
 import { 
   QrCode, 
   Layers, 
@@ -34,7 +35,9 @@ import {
   Calendar,
   RotateCcw,
   Trash2,
-  Edit3
+  Edit3,
+  Sliders,
+  Scissors
 } from 'lucide-react';
 
 export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
@@ -63,17 +66,27 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
   // Modales
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showSingleModal, setShowSingleModal] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+
+  // Configuración de Impresión / Salida a Imprenta
+  const [printConfig, setPrintConfig] = useState({
+    cutExternal: true,    // Trazo fucsia perimetral exterior (#F0047F)
+    cutInternal: true,    // Trazos fucsia interiores de troquel (#F0047F)
+    showBatchCode: true,  // Mostrar número de lote en lateral
+    batchCodeText: 'L1C', // Texto personalizado del lote
+  });
+  const [printExportCount, setPrintExportCount] = useState(1);
 
   // QRs Llenos vs Vacíos
   const activeQrs = qrList.filter(q => q.status === 'active');
   const inactiveQrs = qrList.filter(q => q.status !== 'active');
 
-  // Datos para creación por lote
-  const [batchCount, setBatchCount] = useState(20);
-  const [batchPrefix, setBatchPrefix] = useState('EV2026');
+  // Datos para emisión de QRs (Creación en base de datos)
+  const [batchCount, setBatchCount] = useState(1);
+  const [batchPrefix, setBatchPrefix] = useState('EV');
   const [batchCategory, setBatchCategory] = useState('Auto');
 
-  // Datos para creación individual
+  // Datos para emisión individual
   const [singleSkuInput, setSingleSkuInput] = useState('');
   const [singleCategory, setSingleCategory] = useState('Auto');
 
@@ -87,27 +100,20 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
 
   const targetQrUrl = currentQr ? `${getBaseUrl()}/v/${currentQr.sku}` : '';
 
-  // Dibujar el sticker real en el canvas cada vez que cambie el SKU o tamaño
+  // Dibujar el sticker oficial en el canvas cada vez que cambie el SKU o la configuración de impresión
   useEffect(() => {
     let isCancelled = false;
     async function renderCanvas() {
       if (!currentQr || !canvasRef.current) return;
       try {
-        const generatedCanvas = await createStickerCanvas(currentQr.sku, targetQrUrl, selectedSizeCm);
-        if (!isCancelled && canvasRef.current) {
-          const mainCtx = canvasRef.current.getContext('2d');
-          canvasRef.current.width = generatedCanvas.width;
-          canvasRef.current.height = generatedCanvas.height;
-          mainCtx.clearRect(0, 0, generatedCanvas.width, generatedCanvas.height);
-          mainCtx.drawImage(generatedCanvas, 0, 0);
-        }
+        await renderOfficialStickerToCanvas(currentQr.sku, targetQrUrl, canvasRef.current, printConfig);
       } catch (err) {
         console.error("Error al renderizar canvas QR:", err);
       }
     }
     renderCanvas();
     return () => { isCancelled = true; };
-  }, [currentQr, targetQrUrl, selectedSizeCm]);
+  }, [currentQr, targetQrUrl, printConfig]);
 
   const filteredQrs = qrList.filter(q => {
     const matchesSearch = !searchQuery || (
@@ -164,40 +170,50 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
     }
   };
 
-  const handleExportZip = async () => {
-    if (filteredQrs.length === 0) {
-      alert("No hay stickers para exportar. Genera al menos uno.");
+  const handleExportZip = async (customCount = null) => {
+    const countToUse = customCount ? Math.min(Number(customCount), filteredQrs.length) : filteredQrs.length;
+    const listToExport = filteredQrs.slice(0, countToUse);
+    if (listToExport.length === 0) {
+      alert("No hay stickers para exportar. Emite al menos uno primero.");
       return;
     }
     setIsExporting(true);
     try {
-      await exportBatchToZip(filteredQrs, selectedSizeCm, getBaseUrl());
+      await exportBatchOfficialZip(listToExport, getBaseUrl, printConfig);
     } catch (e) {
       alert("Error al exportar ZIP: " + e.message);
     }
     setIsExporting(false);
   };
 
-  const handleExportPdf = async () => {
-    if (filteredQrs.length === 0) {
-      alert("No hay stickers para generar PDF. Genera al menos uno.");
+  const handleExportPliegoPdf = async (customCount = null) => {
+    const countToUse = customCount ? Math.min(Number(customCount), filteredQrs.length) : filteredQrs.length;
+    const listToExport = filteredQrs.slice(0, countToUse);
+    if (listToExport.length === 0) {
+      alert("No hay stickers para generar pliego. Emite al menos uno primero.");
       return;
     }
     setIsExporting(true);
     try {
-      await exportBatchToPdf(filteredQrs, selectedSizeCm, getBaseUrl());
+      await exportBatchOfficialPliegoPdf(listToExport, getBaseUrl, printConfig);
     } catch (e) {
-      alert("Error al generar PDF: " + e.message);
+      alert("Error al generar Pliego PDF: " + e.message);
     }
     setIsExporting(false);
   };
 
-  const handleDownloadSinglePng = () => {
-    if (!canvasRef.current || !currentQr) return;
-    const a = document.createElement('a');
-    a.href = canvasRef.current.toDataURL('image/png');
-    a.download = `Sticker_EscudoVial_${currentQr.sku}_${selectedSizeCm}x${selectedSizeCm}cm.png`;
-    a.click();
+  const handleDownloadSingleSvg = () => {
+    if (!currentQr) return;
+    exportOfficialStickerSvg(currentQr.sku, targetQrUrl, printConfig);
+  };
+
+  const handleDownloadSinglePdf = async () => {
+    if (!currentQr) return;
+    try {
+      await exportOfficialStickerPdf(currentQr.sku, targetQrUrl, printConfig);
+    } catch (e) {
+      alert("Error al generar PDF individual: " + e.message);
+    }
   };
 
   const handlePrintCurrent = () => {
@@ -212,7 +228,7 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
           <style>
             body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f8fafc; font-family: sans-serif; }
             .sticker-card { text-align: center; }
-            img { width: ${selectedSizeCm}cm; height: ${selectedSizeCm}cm; border-radius: 12px; }
+            img { width: 45mm; height: 130mm; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
             @media print {
               body { background: white; }
               .no-print { display: none; }
@@ -223,7 +239,7 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
           <div class="sticker-card">
             <img src="${dataUrl}" />
             <p class="no-print" style="margin-top: 15px; font-weight: bold; color: #532C8C;">
-              Sticker oficial Escudo Vial (${selectedSizeCm} x ${selectedSizeCm} cm)
+              Sticker oficial Escudo Vial (45 x 130 mm) - ${currentQr.sku}
             </p>
           </div>
           <script>
@@ -298,34 +314,46 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
           </p>
         </div>
 
-        {/* Botones de Creación */}
-        <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
+        {/* Botones de Emisión e Impresión */}
+        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
           <button
             type="button"
             onClick={() => setShowSingleModal(true)}
-            className="flex-1 md:flex-none bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            className="flex-1 md:flex-none bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            title="Dar de alta 1 QR en inventario"
           >
             <Plus className="w-3.5 h-3.5 text-teal-400" />
-            <span>+ Generar QR Individual</span>
+            <span>Emitir 1 QR</span>
           </button>
 
           <button
             type="button"
             onClick={() => setShowBatchModal(true)}
-            className="flex-1 md:flex-none bg-[#00A896] hover:bg-[#008677] active:scale-95 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            className="flex-1 md:flex-none bg-[#00A896] hover:bg-[#008677] active:scale-95 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            title="Emitir varios QRs en inventario"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>+ Generar Lote Masivo</span>
+            <span>Emitir Lote</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowPrintModal(true)}
+            className="flex-1 md:flex-none bg-[#532C8C] hover:bg-[#432172] active:scale-95 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer border border-purple-400/30"
+            title="Configurar corte, lote y cantidad para imprenta"
+          >
+            <Printer className="w-3.5 h-3.5 text-teal-300" />
+            <span>Configurar e Imprimir</span>
           </button>
 
           {onGoToExporter && (
             <button
               type="button"
               onClick={onGoToExporter}
-              className="flex-1 md:flex-none bg-purple-50 hover:bg-[#532C8C] text-[#532C8C] hover:text-white border border-purple-200 hover:border-[#532C8C] font-extrabold text-xs px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+              className="flex-1 md:flex-none bg-purple-50 hover:bg-[#532C8C] text-[#532C8C] hover:text-white border border-purple-200 hover:border-[#532C8C] font-extrabold text-xs px-3 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Exportar QRs Puros (Sin Marco)</span>
+              <span>QRs Puros</span>
             </button>
           )}
         </div>
@@ -354,29 +382,15 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                 </span>
               </div>
 
-              {/* Selector de Tamaño del Troquel */}
-              <div className="w-full mt-3 flex items-center justify-between bg-slate-50 p-2 rounded-2xl border border-slate-200 text-xs">
-                <span className="font-bold text-slate-600 pl-1">Tamaño:</span>
-                <div className="flex items-center gap-1">
-                  {[
-                    { cm: 5, label: '5x5 cm' },
-                    { cm: 8, label: '8x8 cm' },
-                    { cm: 12, label: '12x12 cm' },
-                  ].map(sz => (
-                    <button
-                      key={sz.cm}
-                      type="button"
-                      onClick={() => setSelectedSizeCm(sz.cm)}
-                      className={`px-2.5 py-1 rounded-xl font-bold text-[11px] transition-all cursor-pointer ${
-                        selectedSizeCm === sz.cm
-                          ? 'bg-[#532C8C] text-white shadow-xs'
-                          : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
-                      }`}
-                    >
-                      {sz.label}
-                    </button>
-                  ))}
+              {/* Formato Oficial de Imprenta */}
+              <div className="w-full mt-3 flex items-center justify-between bg-purple-50/80 p-2.5 rounded-2xl border border-purple-200 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#F0047F] shadow-xs" title="Línea de corte" />
+                  <span className="font-extrabold text-[#532C8C] text-[11px]">Plantilla Oficial Imprenta</span>
                 </div>
+                <span className="bg-purple-100/90 text-[#432172] font-mono font-bold text-[10px] px-2 py-0.5 rounded-lg border border-purple-200">
+                  45 x 130 mm · Troquelado
+                </span>
               </div>
 
               {/* Dominio Oficial Activo */}
@@ -391,17 +405,105 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
               </div>
 
               {/* RENDERIZADO DEL STICKER REAL EN CANVAS */}
-              <div className="my-4 relative group flex flex-col items-center">
+              <div className="my-3 relative group flex flex-col items-center">
                 <div className="p-2 bg-slate-900 rounded-3xl shadow-2xl border-4 border-slate-800">
                   <canvas
                     ref={canvasRef}
                     style={{
-                      width: selectedSizeCm === 5 ? '190px' : selectedSizeCm === 8 ? '240px' : '270px',
-                      height: selectedSizeCm === 5 ? '190px' : selectedSizeCm === 8 ? '240px' : '270px',
+                      width: '142px',
+                      height: '410px',
                     }}
-                    className="rounded-2xl transition-all duration-300"
+                    className="rounded-xl transition-all duration-300 shadow-md bg-white"
                   />
                 </div>
+                <span className="text-[10px] text-slate-400 mt-2 font-mono text-center">
+                  Línea fucsia (#F0047F) = Vector de corte plotter
+                </span>
+              </div>
+
+              {/* Personalización de Salida para Imprenta en Tiempo Real */}
+              <div className="w-full bg-slate-50 rounded-2xl p-3 border border-slate-200 flex flex-col gap-2.5 text-xs mb-1">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                  <span className="font-extrabold text-[#532C8C] text-[11px] flex items-center gap-1.5 uppercase tracking-wide">
+                    <Sliders className="w-3.5 h-3.5 text-[#00A896]" />
+                    Ajustes de Impresión
+                  </span>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 font-bold px-1.5 py-0.5 rounded">
+                    En vivo
+                  </span>
+                </div>
+
+                {/* Switch 1: Vector de Corte Externo */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2.5 h-2.5 rounded-full ${printConfig.cutExternal ? 'bg-[#F0047F]' : 'bg-slate-300'}`} />
+                    <span className="font-bold text-slate-700 text-[11px]">Corte externo (Perímetro 45x130)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrintConfig(prev => ({ ...prev, cutExternal: !prev.cutExternal }))}
+                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      printConfig.cutExternal ? 'bg-[#F0047F]' : 'bg-slate-300'
+                    }`}
+                  >
+                    <div className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      printConfig.cutExternal ? 'translate-x-4.5' : 'translate-x-0'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Switch 2: Vectores de Corte Internos */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2.5 h-2.5 rounded-full ${printConfig.cutInternal ? 'bg-[#F0047F]' : 'bg-slate-300'}`} />
+                    <span className="font-bold text-slate-700 text-[11px]">Cortes internos (2 troqueles)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrintConfig(prev => ({ ...prev, cutInternal: !prev.cutInternal }))}
+                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      printConfig.cutInternal ? 'bg-[#F0047F]' : 'bg-slate-300'
+                    }`}
+                  >
+                    <div className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      printConfig.cutInternal ? 'translate-x-4.5' : 'translate-x-0'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Switch 3: Número de Lote */}
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200/80">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${printConfig.showBatchCode ? 'bg-[#532C8C]' : 'bg-slate-300'}`} />
+                    <span className="font-bold text-slate-700 text-[11px]">Número de Lote lateral</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrintConfig(prev => ({ ...prev, showBatchCode: !prev.showBatchCode }))}
+                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                      printConfig.showBatchCode ? 'bg-[#532C8C]' : 'bg-slate-300'
+                    }`}
+                  >
+                    <div className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      printConfig.showBatchCode ? 'translate-x-4.5' : 'translate-x-0'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Input: Texto del Lote (si está activo) */}
+                {printConfig.showBatchCode && (
+                  <div className="flex items-center gap-2 mt-0.5 bg-white p-1.5 rounded-xl border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-500 pl-1 uppercase">Texto lote:</span>
+                    <input
+                      type="text"
+                      maxLength={12}
+                      value={printConfig.batchCodeText}
+                      onChange={(e) => setPrintConfig(prev => ({ ...prev, batchCodeText: e.target.value.toUpperCase() }))}
+                      placeholder="Ej. L1C"
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 font-mono uppercase font-bold text-slate-900 text-xs focus:outline-none focus:border-[#532C8C]"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Ficha Explicativa: A dónde dirige este QR */}
@@ -448,23 +550,35 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
               </div>
 
               {/* Botones de Acción del Sticker Individual */}
-              <div className="w-full grid grid-cols-2 gap-2 mt-3">
+              <div className="w-full grid grid-cols-3 gap-1.5 mt-3">
                 <button
                   type="button"
-                  onClick={handlePrintCurrent}
-                  className="bg-[#532C8C] hover:bg-[#432172] text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  onClick={handleDownloadSingleSvg}
+                  title="Descargar SVG con vector de corte magenta (#F0047F) para plotter"
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Imprimir Sticker</span>
+                  <Download className="w-3.5 h-3.5 text-teal-300" />
+                  <span>SVG Plotter</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={handleDownloadSinglePng}
-                  className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                  onClick={handleDownloadSinglePdf}
+                  title="Descargar PDF 45x130mm listo para imprenta"
+                  className="bg-[#532C8C] hover:bg-[#432172] text-white font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5 text-teal-300" />
-                  <span>Bajar PNG (300DPI)</span>
+                  <FileText className="w-3.5 h-3.5 text-purple-200" />
+                  <span>PDF 45x130</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintCurrent}
+                  title="Imprimir troquel a escala 1:1"
+                  className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Imprimir</span>
                 </button>
               </div>
 
@@ -513,37 +627,49 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-xs tracking-wider uppercase text-teal-300 flex items-center gap-1.5">
                 <Download className="w-4 h-4" />
-                Exportación Masiva
+                Exportación Masiva Imprenta
               </span>
               <span className="text-[10px] font-mono bg-white/15 px-2 py-0.5 rounded text-white/90">
                 {filteredQrs.length} stickers
               </span>
             </div>
             <p className="text-xs text-white/80 leading-relaxed">
-              Descarga todos los stickers filtrados en el tamaño seleccionado ({selectedSizeCm}x{selectedSizeCm} cm) para imprenta comercial.
+              Descarga todos los stickers en formato oficial (45x130 mm) con vectores de corte fucsia (#F0047F) para imprenta comercial y plotter.
             </p>
 
             <div className="grid grid-cols-2 gap-2 mt-1">
               <button
                 type="button"
                 disabled={isExporting}
-                onClick={handleExportZip}
+                onClick={() => handleExportZip()}
                 className="bg-white/15 hover:bg-white/25 active:scale-95 text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 border border-white/20 transition-all cursor-pointer disabled:opacity-50"
               >
                 <Layers className="w-3.5 h-3.5 text-teal-300" />
-                <span>{isExporting ? 'Generando...' : 'Descargar ZIP'}</span>
+                <span>{isExporting ? 'Generando...' : 'Lote ZIP (SVGs)'}</span>
               </button>
 
               <button
                 type="button"
                 disabled={isExporting}
-                onClick={handleExportPdf}
+                onClick={() => handleExportPliegoPdf()}
                 className="bg-[#00A896] hover:bg-[#008677] active:scale-95 text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm disabled:opacity-50"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Pliego PDF (A4)</span>
+                <span>Pliego A3 (15/hoja)</span>
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPrintExportCount(Math.min(15, filteredQrs.length || 1));
+                setShowPrintModal(true);
+              }}
+              className="w-full mt-1 bg-white hover:bg-purple-50 text-[#532C8C] font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm border border-white/30"
+            >
+              <Printer className="w-3.5 h-3.5 text-[#532C8C]" />
+              <span>Personalizar Cantidad y Salida a Imprenta</span>
+            </button>
           </div>
         </div>
 
@@ -1196,42 +1322,69 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
             </div>
 
             <form onSubmit={handleCreateBatch} className="flex flex-col gap-3.5 mt-4 text-xs">
-              <div className="flex flex-col gap-1 text-left">
-                <label className="font-bold text-slate-700 uppercase tracking-wider">
-                  Cantidad de Stickers a Generar
+              <div className="flex flex-col gap-1.5 text-left">
+                <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px] flex items-center justify-between">
+                  <span>Cantidad de Stickers a Generar</span>
+                  <span className="font-mono text-purple-700 font-extrabold text-xs">
+                    {batchCount} {Number(batchCount) === 1 ? 'sticker' : 'stickers'}
+                  </span>
                 </label>
-                <select
-                  value={batchCount}
-                  onChange={(e) => setBatchCount(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900 focus:outline-none focus:border-[#532C8C]"
-                >
-                  <option value={10}>10 stickers (Prueba rápida)</option>
-                  <option value={25}>25 stickers (Pliego pequeño)</option>
-                  <option value={50}>50 stickers (Pliego estándar)</option>
-                  <option value={100}>100 stickers (Lote comercial)</option>
-                  <option value={200}>200 stickers (Gran volumen)</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1 text-left">
-                <label className="font-bold text-slate-700 uppercase tracking-wider">
-                  Prefijo de Código SKU
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={batchPrefix}
-                  onChange={(e) => setBatchPrefix(e.target.value)}
-                  placeholder="Ej. EV2026"
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono uppercase font-bold text-slate-900 focus:outline-none focus:border-[#532C8C]"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    required
+                    value={batchCount}
+                    onChange={(e) => setBatchCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-extrabold text-base text-slate-900 focus:outline-none focus:border-[#532C8C] w-24 text-center"
+                  />
+                  <div className="flex flex-wrap items-center gap-1 flex-1">
+                    {[1, 2, 3, 5, 10, 25, 50, 100].map(qty => (
+                      <button
+                        key={qty}
+                        type="button"
+                        onClick={() => setBatchCount(qty)}
+                        className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                          Number(batchCount) === qty
+                            ? 'bg-[#532C8C] text-white shadow-xs'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {qty}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <span className="text-[10px] text-slate-400">
-                  Se generarán como: <code>{batchPrefix}0001</code>, <code>{batchPrefix}0002</code>...
+                  Elige la cantidad exacta para la imprenta (1, 2, 3 o cualquier número personalizado).
                 </span>
               </div>
 
               <div className="flex flex-col gap-1 text-left">
-                <label className="font-bold text-slate-700 uppercase tracking-wider">
+                <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                  Formato de Código SKU
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={batchPrefix}
+                    onChange={(e) => setBatchPrefix(e.target.value)}
+                    placeholder="EV"
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono uppercase font-bold text-slate-900 focus:outline-none focus:border-[#532C8C] w-24 text-center"
+                  />
+                  <div className="flex-1 bg-purple-50 border border-purple-200 rounded-xl px-3 py-2 text-[11px] font-mono text-purple-900 font-bold truncate">
+                    Vista previa: {batchPrefix === 'EV' ? 'EV####VE (ej. EV3362VE)' : `${batchPrefix}0001`}
+                  </div>
+                </div>
+                <span className="text-[10px] text-slate-400">
+                  Formato oficial estándar: <code>EV</code> + 4 dígitos + <code>VE</code> (ej. <code>EV3362VE</code>).
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
                   Categoría de Vehículo
                 </label>
                 <select
@@ -1261,6 +1414,236 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NUEVO: Configuración y Salida para Imprenta */}
+      {showPrintModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowPrintModal(false);
+          }}
+        >
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl relative border border-purple-100 animate-in zoom-in-95 duration-200 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-purple-50 text-[#532C8C] flex items-center justify-center shrink-0 border border-purple-100">
+                  <Printer className="w-5 h-5 text-[#532C8C]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-1.5">
+                    Configuración de Salida para Imprenta
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Personaliza los vectores de corte, número de lote y cantidad a exportar.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPrintModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* SECCIÓN 1: VECTORES DE CORTE */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wide">
+                  <Scissors className="w-3.5 h-3.5 text-[#F0047F]" />
+                  Vectores de Corte Plotter (Líneas Fucsia #F0047F)
+                </span>
+                <span className="text-[10px] font-mono bg-pink-50 text-[#F0047F] px-2 py-0.5 rounded font-bold border border-pink-200">
+                  Plotter
+                </span>
+              </div>
+
+              {/* Switch 1: Corte Externo */}
+              <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80">
+                <div className="flex flex-col">
+                  <span className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                    <span className={`w-2.5 h-2.5 rounded-full ${printConfig.cutExternal ? 'bg-[#F0047F]' : 'bg-slate-300'}`} />
+                    Vector de Corte Externo
+                  </span>
+                  <span className="text-[11px] text-slate-500 mt-0.5">
+                    Línea perimetral exterior que delimita la lámina completa (45 × 130 mm).
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPrintConfig(prev => ({ ...prev, cutExternal: !prev.cutExternal }))}
+                  className={`w-12 h-6.5 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ml-3 ${
+                    printConfig.cutExternal ? 'bg-[#F0047F]' : 'bg-slate-300'
+                  }`}
+                >
+                  <div className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                    printConfig.cutExternal ? 'translate-x-5.5' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Switch 2: Cortes Internos */}
+              <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80">
+                <div className="flex flex-col">
+                  <span className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                    <span className={`w-2.5 h-2.5 rounded-full ${printConfig.cutInternal ? 'bg-[#F0047F]' : 'bg-slate-300'}`} />
+                    Vectores de Corte Internos
+                  </span>
+                  <span className="text-[11px] text-slate-500 mt-0.5">
+                    Troqueles interiores del sticker pequeño superior y el sticker grande inferior.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPrintConfig(prev => ({ ...prev, cutInternal: !prev.cutInternal }))}
+                  className={`w-12 h-6.5 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ml-3 ${
+                    printConfig.cutInternal ? 'bg-[#F0047F]' : 'bg-slate-300'
+                  }`}
+                >
+                  <div className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                    printConfig.cutInternal ? 'translate-x-5.5' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: NÚMERO DE LOTE */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wide">
+                  <Tag className="w-3.5 h-3.5 text-[#532C8C]" />
+                  Rotulación de Número de Lote Lateral
+                </span>
+                <span className="text-[10px] font-mono bg-purple-50 text-[#532C8C] px-2 py-0.5 rounded font-bold border border-purple-200">
+                  {printConfig.showBatchCode ? 'Activo' : 'Desactivado'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80">
+                <div className="flex flex-col">
+                  <span className="font-extrabold text-slate-900 text-xs">
+                    Incluir Número de Lote
+                  </span>
+                  <span className="text-[11px] text-slate-500 mt-0.5">
+                    Imprime el código vertical en el margen lateral del sticker.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPrintConfig(prev => ({ ...prev, showBatchCode: !prev.showBatchCode }))}
+                  className={`w-12 h-6.5 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ml-3 ${
+                    printConfig.showBatchCode ? 'bg-[#532C8C]' : 'bg-slate-300'
+                  }`}
+                >
+                  <div className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                    printConfig.showBatchCode ? 'translate-x-5.5' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {printConfig.showBatchCode && (
+                <div className="flex flex-col gap-1 text-left bg-white p-3 rounded-xl border border-slate-200/80">
+                  <label className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                    Texto Personalizado del Lote
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={15}
+                    value={printConfig.batchCodeText}
+                    onChange={(e) => setPrintConfig(prev => ({ ...prev, batchCodeText: e.target.value.toUpperCase() }))}
+                    placeholder="Ej. L1C o LOTE-01"
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono uppercase font-bold text-slate-900 focus:outline-none focus:border-[#532C8C]"
+                  />
+                  <span className="text-[10px] text-slate-400">
+                    Se imprimirá verticalmente en el sticker (reemplazando "L1C0").
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* SECCIÓN 3: CANTIDAD A IMPRIMIR / EXPORTAR */}
+            <div className="bg-purple-50/70 rounded-2xl p-4 border border-purple-200 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-[#532C8C] text-xs flex items-center gap-1.5 uppercase tracking-wide">
+                  <Layers className="w-3.5 h-3.5 text-[#00A896]" />
+                  Cantidad de Stickers a Imprimir
+                </span>
+                <span className="text-xs font-mono font-extrabold text-[#532C8C] bg-white px-2 py-0.5 rounded-lg border border-purple-200">
+                  {printExportCount} de {filteredQrs.length} disponibles
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max={Math.max(1, filteredQrs.length)}
+                  value={printExportCount}
+                  onChange={(e) => setPrintExportCount(Math.min(filteredQrs.length, Math.max(1, parseInt(e.target.value) || 1)))}
+                  className="bg-white border border-purple-200 rounded-xl px-3 py-2 font-mono font-extrabold text-base text-purple-900 focus:outline-none focus:border-[#532C8C] w-24 text-center shadow-xs"
+                />
+                <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                  {[1, 2, 3, 5, 10, 15, 30, filteredQrs.length].filter((v, idx, arr) => v > 0 && arr.indexOf(v) === idx).map(qty => (
+                    <button
+                      key={qty}
+                      type="button"
+                      onClick={() => setPrintExportCount(qty)}
+                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                        Number(printExportCount) === qty
+                          ? 'bg-[#532C8C] text-white shadow-xs'
+                          : 'bg-white hover:bg-purple-100 text-[#532C8C] border border-purple-200'
+                      }`}
+                    >
+                      {qty === filteredQrs.length ? `Todos (${qty})` : qty === 15 ? '15 (1 Pliego A3)' : qty}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <span className="text-[10px] text-purple-700/80">
+                Se tomarán los primeros {printExportCount} stickers del catálogo para aplicarles estas configuraciones.
+              </span>
+            </div>
+
+            {/* BOTONES DE EXPORTACIÓN */}
+            <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPrintModal(false)}
+                className="w-full sm:w-auto px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition-all cursor-pointer text-xs"
+              >
+                Cerrar
+              </button>
+
+              <button
+                type="button"
+                disabled={isExporting}
+                onClick={async () => {
+                  setShowPrintModal(false);
+                  await handleExportZip(printExportCount);
+                }}
+                className="flex-1 w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md text-xs flex items-center justify-center gap-1.5"
+              >
+                <Download className="w-3.5 h-3.5 text-teal-300" />
+                <span>Exportar Lote ZIP ({printExportCount} SVGs)</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isExporting}
+                onClick={async () => {
+                  setShowPrintModal(false);
+                  await handleExportPliegoPdf(printExportCount);
+                }}
+                className="flex-1 w-full bg-[#00A896] hover:bg-[#008677] active:scale-95 text-white font-extrabold py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md text-xs flex items-center justify-center gap-1.5"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Pliego A3 ({printExportCount} Stickers)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

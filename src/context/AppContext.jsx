@@ -721,21 +721,28 @@ export function AppProvider({ children }) {
   };
 
   // 4. GENERACIÓN DE QRS POR LOTE (BATCH GENERATOR)
-  const createBatchQrs = async (count = 10, prefix = 'EV2026', vehicleCategory = 'Auto') => {
+  const createBatchQrs = async (count = 10, prefix = 'EV', vehicleCategory = 'Auto') => {
     const newItems = [];
     const existingSkus = new Set(qrList.map(q => q.sku.toUpperCase()));
-    const defaultPrefix = vehicleCategory?.toUpperCase().includes('MOTO') ? 'EVMOTO' : 'EVAUTO';
-    const cleanPrefix = (prefix && prefix !== 'EV2026' ? prefix : defaultPrefix).replace(/[#-]/g, '').toUpperCase();
+    const cleanPrefix = (prefix || 'EV').replace(/[#-]/g, '').toUpperCase();
 
-    let counter = 1;
     for (let i = 1; i <= count; i++) {
-      let candidateSku = `${cleanPrefix}${String(counter).padStart(4, '0')}`;
-      while (existingSkus.has(candidateSku.toUpperCase())) {
-        counter++;
+      let candidateSku = '';
+      if (cleanPrefix === 'EV' || cleanPrefix === 'EV2026') {
+        do {
+          const rand = Math.floor(1000 + Math.random() * 9000);
+          candidateSku = `EV${rand}VE`;
+        } while (existingSkus.has(candidateSku.toUpperCase()));
+      } else {
+        let counter = 1;
         candidateSku = `${cleanPrefix}${String(counter).padStart(4, '0')}`;
+        while (existingSkus.has(candidateSku.toUpperCase())) {
+          counter++;
+          candidateSku = `${cleanPrefix}${String(counter).padStart(4, '0')}`;
+        }
       }
+
       existingSkus.add(candidateSku.toUpperCase());
-      counter++;
 
       newItems.push({
         sku: candidateSku,
@@ -885,15 +892,11 @@ export function AppProvider({ children }) {
         return null;
       }
     } else {
-      // Secuencial correlativo según categoría: EVAUTO0001, EVMOTO0001, etc.
-      const prefix = category?.toUpperCase().includes('MOTO') ? 'EVMOTO' : 'EVAUTO';
-      let counter = 1;
-      let candidate = `${prefix}${String(counter).padStart(4, '0')}`;
-      while (existingSkus.has(candidate)) {
-        counter++;
-        candidate = `${prefix}${String(counter).padStart(4, '0')}`;
-      }
-      sku = candidate;
+      // Formato oficial de sticker: EV + 4 dígitos + VE (ej. EV3362VE)
+      do {
+        const rand = Math.floor(1000 + Math.random() * 9000);
+        sku = `EV${rand}VE`;
+      } while (existingSkus.has(sku));
     }
 
     const newQr = {
