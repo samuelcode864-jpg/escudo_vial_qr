@@ -14,9 +14,27 @@ import {
 
 const AppContext = createContext(null);
 
+function getPrintedSkusMap() {
+  try {
+    const raw = localStorage.getItem('ev_printed_skus');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePrintedSkusMap(map) {
+  try {
+    localStorage.setItem('ev_printed_skus', JSON.stringify(map));
+  } catch (e) {
+    console.error('Error saving printed skus', e);
+  }
+}
+
 export function AppProvider({ children }) {
   const [qrList, setQrList] = useState(() => {
     const saved = localStorage.getItem('ev_qr_list');
+    const printedMap = getPrintedSkusMap();
     let list = [];
     if (saved) {
       try {
@@ -37,7 +55,12 @@ export function AppProvider({ children }) {
       const clean = (q.sku || '').replace(/[#-]/g, '').toUpperCase();
       if (clean && !seen.has(clean)) {
         seen.add(clean);
-        deduped.push({ ...q, sku: clean });
+        deduped.push({
+          ...q,
+          sku: clean,
+          isPrinted: Boolean(printedMap[clean] || q.isPrinted),
+          printedAt: printedMap[clean] || q.printedAt || null
+        });
       }
     }
     list = deduped;
@@ -152,13 +175,18 @@ export function AppProvider({ children }) {
         if (!isMounted) return;
         if (qrsRes.data && qrsRes.data.length > 0) {
           const mappedQrs = qrsRes.data.map(mapQrFromDb);
+          const printedMap = getPrintedSkusMap();
           const seen = new Set();
           const deduped = [];
           for (const q of mappedQrs) {
             const clean = (q.sku || '').toUpperCase();
             if (clean && !seen.has(clean)) {
               seen.add(clean);
-              deduped.push(q);
+              deduped.push({
+                ...q,
+                isPrinted: Boolean(printedMap[clean] || q.isPrinted),
+                printedAt: printedMap[clean] || q.printedAt || null
+              });
             }
           }
           setQrList(deduped);
@@ -210,12 +238,19 @@ export function AppProvider({ children }) {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'qrs' }, (payload) => {
           if (!isMounted) return;
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            const updatedQr = mapQrFromDb(payload.new);
+            const rawUpdated = mapQrFromDb(payload.new);
+            const printedMap = getPrintedSkusMap();
+            const clean = (rawUpdated.sku || '').toUpperCase();
+            const updatedQr = {
+              ...rawUpdated,
+              isPrinted: Boolean(printedMap[clean] || rawUpdated.isPrinted),
+              printedAt: printedMap[clean] || rawUpdated.printedAt || null
+            };
             setQrList(prev => {
-              const idx = prev.findIndex(q => q.sku.toUpperCase() === updatedQr.sku.toUpperCase());
+              const idx = prev.findIndex(q => q.sku.toUpperCase() === clean);
               if (idx >= 0) {
                 const copy = [...prev];
-                copy[idx] = updatedQr;
+                copy[idx] = { ...copy[idx], ...updatedQr };
                 return copy;
               }
               return [updatedQr, ...prev];
@@ -751,7 +786,9 @@ export function AppProvider({ children }) {
         holder: null,
         activatedAt: null,
         scansCount: 0,
-        lastLocation: null
+        lastLocation: null,
+        isPrinted: false,
+        printedAt: null
       });
     }
 
@@ -906,7 +943,9 @@ export function AppProvider({ children }) {
       holder: null,
       activatedAt: null,
       scansCount: 0,
-      lastLocation: null
+      lastLocation: null,
+      isPrinted: false,
+      printedAt: null
     };
 
     setQrList(prev => {
@@ -991,10 +1030,74 @@ export function AppProvider({ children }) {
     localStorage.removeItem('ev_admin_auth');
   };
 
+  // CONTROL DE ESTADO DE IMPRESIÓN (Separación de lotes para imprenta)
+  const markQrsAsPrinted = (skus = []) => {
+    if (!skus || skus.length === 0) return;
+    const now = new Date().toISOString();
+    const map = getPrintedSkusMap();
+    const skuSet = new Set(skus.map(s => (s || '').replace(/[#-]/g, '').toUpperCase()));
+    skuSet.forEach(s => {
+      map[s] = now;
+    });
+    savePrintedSkusMap(map);
+
+    setQrList(prev => prev.map(q => {
+      const clean = (q.sku || '').replace(/[#-]/g, '').toUpperCase();
+      if (skuSet.has(clean)) {
+        return { ...q, isPrinted: true, printedAt: now };
+      }
+      return q;
+    }));
+  };
+
+  const markQrsAsPending = (skus = []) => {
+    if (!skus || skus.length === 0) return;
+    const map = getPrintedSkusMap();
+    const skuSet = new Set(skus.map(s => (s || '').replace(/[#-]/g, '').toUpperCase()));
+    skuSet.forEach(s => {
+      delete map[s];
+    });
+    savePrintedSkusMap(map);
+
+    setQrList(prev => prev.map(q => {
+      const clean = (q.sku || '').replace(/[#-]/g, '').toUpperCase();
+      if (skuSet.has(clean)) {
+        return { ...q, isPrinted: false, printedAt: null };
+      }
+      return q;
+    }));
+  };
+
+  const toggleQrPrinted = (sku) => {
+    const clean = (sku || '').replace(/[#-]/g, '').toUpperCase();
+    const map = getPrintedSkusMap();
+    const isCurrentlyPrinted = Boolean(map[clean]);
+    const now = new Date().toISOString();
+
+    if (isCurrentlyPrinted) {
+      delete map[clean];
+    } else {
+      map[clean] = now;
+    }
+    savePrintedSkusMap(map);
+
+    setQrList(prev => prev.map(q => {
+      if ((q.sku || '').replace(/[#-]/g, '').toUpperCase() === clean) {
+        return {
+          ...q,
+          isPrinted: !isCurrentlyPrinted,
+          printedAt: !isCurrentlyPrinted ? now : null
+        };
+      }
+      return q;
+    }));
+  };
+
   const clearAllData = () => {
     localStorage.removeItem('ev_emergencies');
     localStorage.removeItem('ev_reports');
     localStorage.removeItem('ev_qr_list');
+    localStorage.removeItem('ev_printed_skus');
     setEmergencies([]);
     setReports([]);
     setQrList([]);
@@ -1033,7 +1136,10 @@ export function AppProvider({ children }) {
         clearResolvedEmergencies,
         isSupabaseConfigured,
         resetQr,
-        deleteQr
+        deleteQr,
+        markQrsAsPrinted,
+        markQrsAsPending,
+        toggleQrPrinted
       }}
     >
       {children}

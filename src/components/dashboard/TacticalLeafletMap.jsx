@@ -152,7 +152,7 @@ export default function TacticalLeafletMap({
       ` : '';
 
       const iconHtml = `
-        <div class="relative flex flex-col items-center cursor-pointer transition-all duration-200 transform ${isSelected ? 'scale-115 z-50' : 'hover:scale-105 z-20'}" style="width: 126px;">
+        <div class="relative flex flex-col items-center cursor-pointer transition-all duration-200 transform ${isSelected ? 'scale-115 z-50' : 'hover:scale-105 z-20'}" style="width: 140px;">
           ${radarPulseHtml}
           
           <!-- Cápsula Táctica Principal -->
@@ -165,11 +165,11 @@ export default function TacticalLeafletMap({
             </div>
 
             <!-- Identificadores: SKU arriba y Placa/Modelo abajo (Sin cortes) -->
-            <div class="flex flex-col min-w-0 leading-tight">
-              <span class="font-mono text-[11px] font-black tracking-wide truncate text-white drop-shadow-xs">
+            <div class="flex flex-col min-w-0 flex-1 leading-tight overflow-hidden">
+              <span class="font-mono text-[11px] font-black tracking-wide whitespace-nowrap text-white drop-shadow-xs">
                 ${emg.sku}
               </span>
-              <span class="text-[9px] font-bold text-white/90 truncate max-w-[70px] uppercase tracking-tighter">
+              <span class="text-[9px] font-bold text-white/90 truncate max-w-[85px] uppercase tracking-tighter">
                 ${plateOrModel}
               </span>
             </div>
@@ -186,8 +186,8 @@ export default function TacticalLeafletMap({
       const customIcon = L.divIcon({
         html: iconHtml,
         className: 'custom-radar-marker',
-        iconSize: [126, 52],
-        iconAnchor: [63, 50]
+        iconSize: [140, 54],
+        iconAnchor: [70, 52]
       });
 
       const marker = L.marker([lat, lng], { icon: customIcon });

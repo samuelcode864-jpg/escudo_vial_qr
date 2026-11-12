@@ -44,10 +44,23 @@ import {
 } from 'lucide-react';
 
 export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
-  const { qrList, createBatchQrs, generateNewQr, setActiveSku, resetQr, deleteQr, updateQrHolder } = useApp();
+  const { 
+    qrList, 
+    createBatchQrs, 
+    generateNewQr, 
+    setActiveSku, 
+    resetQr, 
+    deleteQr, 
+    updateQrHolder,
+    markQrsAsPrinted,
+    markQrsAsPending,
+    toggleQrPrinted
+  } = useApp();
 
   const [selectedSku, setSelectedSku] = useState(qrList[0]?.sku || 'EV8842VE');
   const [filterType, setFilterType] = useState('todos');
+  const [printStatusFilter, setPrintStatusFilter] = useState('todos'); // 'todos' | 'pendientes' | 'impresos'
+  const [printOnlyPendingInBatch, setPrintOnlyPendingInBatch] = useState(false);
   const [selectedSizeCm, setSelectedSizeCm] = useState(8); // 5, 8, 12 cm
   const [isExporting, setIsExporting] = useState(false);
   const [copiedSku, setCopiedSku] = useState(null);
@@ -118,6 +131,9 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
     return () => { isCancelled = true; };
   }, [currentQr, targetQrUrl, printConfig]);
 
+  const pendingPrintCount = qrList.filter(q => !q.isPrinted).length;
+  const printedCount = qrList.filter(q => q.isPrinted).length;
+
   const filteredQrs = qrList.filter(q => {
     const matchesSearch = !searchQuery || (
       q.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -127,7 +143,13 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
       (q.holder?.plate && q.holder.plate.toLowerCase().includes(searchQuery.toLowerCase()))
     );
     const matchesFilter = filterType === 'todos' || q.status === filterType;
-    return matchesSearch && matchesFilter;
+    const matchesPrint = printStatusFilter === 'todos'
+      ? true
+      : printStatusFilter === 'pendientes'
+        ? !q.isPrinted
+        : Boolean(q.isPrinted);
+
+    return matchesSearch && matchesFilter && matchesPrint;
   });
 
   const handleCopyLink = (sku) => {
@@ -174,15 +196,17 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
   };
 
   const handleExportZip = async (customCount = null) => {
-    const countToUse = customCount ? Math.min(Number(customCount), filteredQrs.length) : filteredQrs.length;
-    const listToExport = filteredQrs.slice(0, countToUse);
+    const pool = printOnlyPendingInBatch ? filteredQrs.filter(q => !q.isPrinted) : filteredQrs;
+    const countToUse = customCount ? Math.min(Number(customCount), pool.length) : pool.length;
+    const listToExport = pool.slice(0, countToUse);
     if (listToExport.length === 0) {
-      alert("No hay stickers para exportar. Emite al menos uno primero.");
+      alert("No hay stickers para exportar con los filtros seleccionados.");
       return;
     }
     setIsExporting(true);
     try {
       await exportBatchOfficialZip(listToExport, getBaseUrl, printConfig);
+      markQrsAsPrinted(listToExport.map(q => q.sku));
     } catch (e) {
       alert("Error al exportar ZIP: " + e.message);
     }
@@ -190,15 +214,17 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
   };
 
   const handleExportPliegoPdf = async (customCount = null) => {
-    const countToUse = customCount ? Math.min(Number(customCount), filteredQrs.length) : filteredQrs.length;
-    const listToExport = filteredQrs.slice(0, countToUse);
+    const pool = printOnlyPendingInBatch ? filteredQrs.filter(q => !q.isPrinted) : filteredQrs;
+    const countToUse = customCount ? Math.min(Number(customCount), pool.length) : pool.length;
+    const listToExport = pool.slice(0, countToUse);
     if (listToExport.length === 0) {
-      alert("No hay stickers para generar pliego. Emite al menos uno primero.");
+      alert("No hay stickers para generar pliego con los filtros seleccionados.");
       return;
     }
     setIsExporting(true);
     try {
       await exportBatchOfficialPliegoPdf(listToExport, getBaseUrl, printConfig);
+      markQrsAsPrinted(listToExport.map(q => q.sku));
     } catch (e) {
       alert("Error al generar Pliego PDF: " + e.message);
     }
@@ -206,15 +232,17 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
   };
 
   const handleExportJpgZip = async (customCount = null) => {
-    const countToUse = customCount ? Math.min(Number(customCount), filteredQrs.length) : filteredQrs.length;
-    const listToExport = filteredQrs.slice(0, countToUse);
+    const pool = printOnlyPendingInBatch ? filteredQrs.filter(q => !q.isPrinted) : filteredQrs;
+    const countToUse = customCount ? Math.min(Number(customCount), pool.length) : pool.length;
+    const listToExport = pool.slice(0, countToUse);
     if (listToExport.length === 0) {
-      alert("No hay stickers para exportar en JPG. Emite al menos uno primero.");
+      alert("No hay stickers para exportar en JPG con los filtros seleccionados.");
       return;
     }
     setIsExporting(true);
     try {
       await exportBatchJpgZip(listToExport, getBaseUrl, printConfig);
+      markQrsAsPrinted(listToExport.map(q => q.sku));
     } catch (e) {
       alert("Error al exportar lote JPG: " + e.message);
     }
@@ -224,12 +252,14 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
   const handleDownloadSingleSvg = () => {
     if (!currentQr) return;
     exportOfficialStickerSvg(currentQr.sku, targetQrUrl, printConfig);
+    markQrsAsPrinted([currentQr.sku]);
   };
 
   const handleDownloadSinglePdf = async () => {
     if (!currentQr) return;
     try {
       await exportOfficialStickerPdf(currentQr.sku, targetQrUrl, printConfig);
+      markQrsAsPrinted([currentQr.sku]);
     } catch (e) {
       alert("Error al generar PDF individual: " + e.message);
     }
@@ -239,6 +269,7 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
     if (!currentQr) return;
     try {
       await exportOfficialStickerJpg(currentQr.sku, targetQrUrl, printConfig);
+      markQrsAsPrinted([currentQr.sku]);
     } catch (e) {
       alert("Error al generar JPG individual: " + e.message);
     }
@@ -662,18 +693,46 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
 
           {/* Exportación Masiva para Imprenta */}
           <div className="bg-gradient-to-br from-purple-950 via-[#532C8C] to-[#432172] rounded-3xl p-5 text-white shadow-md flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <span className="font-extrabold text-xs tracking-wider uppercase text-teal-300 flex items-center gap-1.5">
                 <Download className="w-4 h-4" />
                 Exportación Masiva Imprenta
               </span>
-              <span className="text-[10px] font-mono bg-white/15 px-2 py-0.5 rounded text-white/90">
-                {filteredQrs.length} stickers
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-bold">
+                  ⏳ {pendingPrintCount} pendientes
+                </span>
+                <span className="text-[10px] font-mono bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full font-bold">
+                  ✅ {printedCount} impresos
+                </span>
+              </div>
             </div>
+
             <p className="text-xs text-white/80 leading-relaxed">
-              Descarga los stickers en archivos JPG individuales por separado (300 ppp) o en vector SVG para imprenta y plotter.
+              Descarga los stickers en JPG individuales a 300 ppp o en vector SVG para imprenta. Al descargar se marcan automáticamente como <strong>Impresos</strong>.
             </p>
+
+            {/* Selector rápido: ¿Descargar solo pendientes o todos? */}
+            <div className="flex items-center gap-2 bg-black/30 p-1 rounded-xl text-xs font-bold border border-white/10">
+              <button
+                type="button"
+                onClick={() => setPrintOnlyPendingInBatch(true)}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer text-[11px] ${
+                  printOnlyPendingInBatch ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-white/80 hover:text-white'
+                }`}
+              >
+                ⏳ Solo Pendientes ({pendingPrintCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintOnlyPendingInBatch(false)}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer text-[11px] ${
+                  !printOnlyPendingInBatch ? 'bg-white/20 text-white font-black shadow-sm' : 'text-white/80 hover:text-white'
+                }`}
+              >
+                📁 Todos ({filteredQrs.length})
+              </button>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
               <button
@@ -810,64 +869,149 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
           </div>
 
           {/* Barra de Filtros y Pestañas Destacadas */}
-          <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-            <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl w-full md:w-auto overflow-x-auto no-scrollbar">
-              <button
-                type="button"
-                onClick={() => setFilterType('active')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
-                  filterType === 'active'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
-                <span>QRs Entregados / Llenos</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  filterType === 'active' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {activeQrs.length}
-                </span>
-              </button>
+          <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-xs flex flex-col gap-3">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl w-full md:w-auto overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => setFilterType('active')}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
+                    filterType === 'active'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
+                  <span>QRs Entregados / Llenos</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    filterType === 'active' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {activeQrs.length}
+                  </span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setFilterType('inactive')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
-                  filterType === 'inactive'
-                    ? 'bg-[#532C8C] text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                }`}
-              >
-                <Tag className="w-3.5 h-3.5" />
-                <span>Generados en Stock (Sin Llenar)</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  filterType === 'inactive' ? 'bg-purple-900 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {inactiveQrs.length}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterType('inactive')}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
+                    filterType === 'inactive'
+                      ? 'bg-[#532C8C] text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>Generados en Stock (Sin Llenar)</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    filterType === 'inactive' ? 'bg-purple-900 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {inactiveQrs.length}
+                  </span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setFilterType('todos')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
-                  filterType === 'todos'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                }`}
-              >
-                <span>Ver Todos</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  filterType === 'todos' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {qrList.length}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterType('todos')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
+                    filterType === 'todos'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <span>Ver Todos</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    filterType === 'todos' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {qrList.length}
+                  </span>
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-500 font-semibold shrink-0">
+                Mostrando {filteredQrs.length} de {qrList.length} stickers
+              </div>
             </div>
 
-            <div className="text-xs text-slate-500 font-semibold shrink-0">
-              Mostrando {filteredQrs.length} de {qrList.length} stickers
+            {/* Sub-barra: Filtro de Imprenta (Solución 1: Pendientes vs Ya Impresos) */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200/80">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2 flex items-center gap-1">
+                  <Printer className="w-3 h-3 text-[#532C8C]" />
+                  Imprenta:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPrintStatusFilter('todos')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    printStatusFilter === 'todos'
+                      ? 'bg-white text-purple-950 font-black shadow-xs border border-purple-200'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Todos ({qrList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintStatusFilter('pendientes')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    printStatusFilter === 'pendientes'
+                      ? 'bg-amber-500 text-white font-black shadow-xs'
+                      : 'text-amber-800 hover:bg-amber-100/60'
+                  }`}
+                >
+                  <span>⏳ Pendientes</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    printStatusFilter === 'pendientes' ? 'bg-black/20 text-white' : 'bg-amber-200/80 text-amber-900'
+                  }`}>
+                    {pendingPrintCount}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintStatusFilter('impresos')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    printStatusFilter === 'impresos'
+                      ? 'bg-emerald-600 text-white font-black shadow-xs'
+                      : 'text-emerald-800 hover:bg-emerald-100/60'
+                  }`}
+                >
+                  <span>✅ Ya Impresos</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    printStatusFilter === 'impresos' ? 'bg-black/20 text-white' : 'bg-emerald-200/80 text-emerald-900'
+                  }`}>
+                    {printedCount}
+                  </span>
+                </button>
+              </div>
+
+              {/* Acciones Rápidas de Imprenta */}
+              <div className="flex items-center gap-1.5">
+                {pendingPrintCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pendingSkus = qrList.filter(q => !q.isPrinted).map(q => q.sku);
+                      markQrsAsPrinted(pendingSkus);
+                    }}
+                    className="text-[11px] font-bold text-slate-600 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 px-2.5 py-1 rounded-lg transition-all cursor-pointer border border-slate-200"
+                    title="Marcar todos los stickers pendientes como ya impresos"
+                  >
+                    Marcar todos como Impresos
+                  </button>
+                )}
+                {printedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const printedSkus = qrList.filter(q => q.isPrinted).map(q => q.sku);
+                      markQrsAsPending(printedSkus);
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:text-amber-700 bg-slate-100 hover:bg-amber-50 px-2.5 py-1 rounded-lg transition-all cursor-pointer border border-slate-200"
+                    title="Restablecer todos a pendientes de imprenta"
+                  >
+                    Resetear a Pendientes
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -900,6 +1044,7 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                         <th className="py-3 px-4">Estado</th>
                       </>
                     )}
+                    <th className="py-3 px-3 text-center">Imprenta</th>
                     <th className="py-3 px-4 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -1098,6 +1243,29 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                           </>
                         )}
 
+                        {/* Columna Estado de Imprenta */}
+                        <td className="py-3.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          {qr.isPrinted ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleQrPrinted(qr.sku)}
+                              title={`Impreso ${qr.printedAt ? new Date(qr.printedAt).toLocaleDateString() : ''}. Haz clic para cambiar a pendiente.`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 transition-all cursor-pointer shadow-2xs"
+                            >
+                              <span>✅ Impreso</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => toggleQrPrinted(qr.sku)}
+                              title="Pendiente de enviar a imprenta. Haz clic para marcar como ya impreso."
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10.5px] font-black bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 transition-all cursor-pointer shadow-2xs"
+                            >
+                              <span>⏳ Pendiente</span>
+                            </button>
+                          )}
+                        </td>
+
                         {/* Acciones */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1">
@@ -1181,7 +1349,7 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                   {/* Estado Vacío */}
                   {filteredQrs.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
                         {filterType === 'active' ? (
                           <div className="max-w-md mx-auto">
                             <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-slate-300" />
@@ -1626,38 +1794,73 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                   Cantidad de Stickers a Imprimir
                 </span>
                 <span className="text-xs font-mono font-extrabold text-[#532C8C] bg-white px-2 py-0.5 rounded-lg border border-purple-200">
-                  {printExportCount} de {filteredQrs.length} disponibles
+                  {printExportCount} de {printOnlyPendingInBatch ? filteredQrs.filter(q => !q.isPrinted).length : filteredQrs.length} disponibles
                 </span>
+              </div>
+
+              {/* Selector Rápido: Pendientes vs Todos */}
+              <div className="flex items-center gap-2 bg-purple-100/60 p-1 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintOnlyPendingInBatch(true);
+                    const pCount = filteredQrs.filter(q => !q.isPrinted).length;
+                    setPrintExportCount(Math.min(15, Math.max(1, pCount)));
+                  }}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer text-xs ${
+                    printOnlyPendingInBatch ? 'bg-amber-500 text-white font-black shadow-xs' : 'text-purple-900 hover:bg-white/50'
+                  }`}
+                >
+                  ⏳ Solo Pendientes ({pendingPrintCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintOnlyPendingInBatch(false);
+                    setPrintExportCount(Math.min(15, Math.max(1, filteredQrs.length)));
+                  }}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer text-xs ${
+                    !printOnlyPendingInBatch ? 'bg-[#532C8C] text-white font-black shadow-xs' : 'text-purple-900 hover:bg-white/50'
+                  }`}
+                >
+                  📁 Todos ({filteredQrs.length})
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   min="1"
-                  max={Math.max(1, filteredQrs.length)}
+                  max={Math.max(1, printOnlyPendingInBatch ? filteredQrs.filter(q => !q.isPrinted).length : filteredQrs.length)}
                   value={printExportCount}
-                  onChange={(e) => setPrintExportCount(Math.min(filteredQrs.length, Math.max(1, parseInt(e.target.value) || 1)))}
+                  onChange={(e) => {
+                    const maxAllowed = printOnlyPendingInBatch ? filteredQrs.filter(q => !q.isPrinted).length : filteredQrs.length;
+                    setPrintExportCount(Math.min(Math.max(1, maxAllowed), Math.max(1, parseInt(e.target.value) || 1)));
+                  }}
                   className="bg-white border border-purple-200 rounded-xl px-3 py-2 font-mono font-extrabold text-base text-purple-900 focus:outline-none focus:border-[#532C8C] w-24 text-center shadow-xs"
                 />
                 <div className="flex flex-wrap items-center gap-1.5 flex-1">
-                  {[1, 2, 3, 5, 10, 15, 30, filteredQrs.length].filter((v, idx, arr) => v > 0 && arr.indexOf(v) === idx).map(qty => (
-                    <button
-                      key={qty}
-                      type="button"
-                      onClick={() => setPrintExportCount(qty)}
-                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                        Number(printExportCount) === qty
-                          ? 'bg-[#532C8C] text-white shadow-xs'
-                          : 'bg-white hover:bg-purple-100 text-[#532C8C] border border-purple-200'
-                      }`}
-                    >
-                      {qty === filteredQrs.length ? `Todos (${qty})` : qty === 15 ? '15 (1 Pliego A3)' : qty}
-                    </button>
-                  ))}
+                  {(() => {
+                    const maxQty = printOnlyPendingInBatch ? filteredQrs.filter(q => !q.isPrinted).length : filteredQrs.length;
+                    return [1, 2, 3, 5, 10, 15, 30, maxQty].filter((v, idx, arr) => v > 0 && v <= maxQty && arr.indexOf(v) === idx).map(qty => (
+                      <button
+                        key={qty}
+                        type="button"
+                        onClick={() => setPrintExportCount(qty)}
+                        className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          Number(printExportCount) === qty
+                            ? 'bg-[#532C8C] text-white shadow-xs'
+                            : 'bg-white hover:bg-purple-100 text-[#532C8C] border border-purple-200'
+                        }`}
+                      >
+                        {qty === maxQty ? `Todos (${qty})` : qty === 15 ? '15 (1 Pliego A3)' : qty}
+                      </button>
+                    ));
+                  })()}
                 </div>
               </div>
               <span className="text-[10px] text-purple-700/80">
-                Se tomarán los primeros {printExportCount} stickers del catálogo para aplicarles estas configuraciones.
+                Se exportarán {printExportCount} stickers {printOnlyPendingInBatch ? 'pendientes de imprenta' : 'del catálogo'}. Al descargarse, se marcarán automáticamente como ✅ Impresos.
               </span>
             </div>
 
