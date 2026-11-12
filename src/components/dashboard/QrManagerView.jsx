@@ -4,8 +4,11 @@ import {
   renderOfficialStickerToCanvas,
   exportOfficialStickerSvg,
   exportOfficialStickerPdf,
+  exportOfficialStickerJpg,
   exportBatchOfficialZip,
-  exportBatchOfficialPliegoPdf
+  exportBatchOfficialPliegoPdf,
+  exportContinuousJpgStrip,
+  exportBatchJpgZip
 } from '../../utils/officialStickerGenerator';
 import { 
   QrCode, 
@@ -13,6 +16,7 @@ import {
   Download, 
   Printer, 
   FileText, 
+  Image as ImageIcon,
   Smartphone, 
   Filter, 
   Plus, 
@@ -202,6 +206,38 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
     setIsExporting(false);
   };
 
+  const handleExportJpgStrip = async (customCount = null) => {
+    const countToUse = customCount ? Math.min(Number(customCount), filteredQrs.length) : filteredQrs.length;
+    const listToExport = filteredQrs.slice(0, countToUse);
+    if (listToExport.length === 0) {
+      alert("No hay stickers para generar tira JPG. Emite al menos uno primero.");
+      return;
+    }
+    setIsExporting(true);
+    try {
+      await exportContinuousJpgStrip(listToExport, getBaseUrl, printConfig);
+    } catch (e) {
+      alert("Error al generar Tira JPG: " + e.message);
+    }
+    setIsExporting(false);
+  };
+
+  const handleExportJpgZip = async (customCount = null) => {
+    const countToUse = customCount ? Math.min(Number(customCount), filteredQrs.length) : filteredQrs.length;
+    const listToExport = filteredQrs.slice(0, countToUse);
+    if (listToExport.length === 0) {
+      alert("No hay stickers para exportar en JPG. Emite al menos uno primero.");
+      return;
+    }
+    setIsExporting(true);
+    try {
+      await exportBatchJpgZip(listToExport, getBaseUrl, printConfig);
+    } catch (e) {
+      alert("Error al exportar lote JPG: " + e.message);
+    }
+    setIsExporting(false);
+  };
+
   const handleDownloadSingleSvg = () => {
     if (!currentQr) return;
     exportOfficialStickerSvg(currentQr.sku, targetQrUrl, printConfig);
@@ -213,6 +249,15 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
       await exportOfficialStickerPdf(currentQr.sku, targetQrUrl, printConfig);
     } catch (e) {
       alert("Error al generar PDF individual: " + e.message);
+    }
+  };
+
+  const handleDownloadSingleJpg = async () => {
+    if (!currentQr) return;
+    try {
+      await exportOfficialStickerJpg(currentQr.sku, targetQrUrl, printConfig);
+    } catch (e) {
+      alert("Error al generar JPG individual: " + e.message);
     }
   };
 
@@ -550,14 +595,14 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
               </div>
 
               {/* Botones de Acción del Sticker Individual */}
-              <div className="w-full grid grid-cols-3 gap-1.5 mt-3">
+              <div className="w-full grid grid-cols-4 gap-1 mt-3">
                 <button
                   type="button"
                   onClick={handleDownloadSingleSvg}
                   title="Descargar SVG con vector de corte magenta (#F0047F) para plotter"
-                  className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[10px] py-2 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
                 >
-                  <Download className="w-3.5 h-3.5 text-teal-300" />
+                  <Download className="w-3 h-3 text-teal-300" />
                   <span>SVG Plotter</span>
                 </button>
 
@@ -565,19 +610,29 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
                   type="button"
                   onClick={handleDownloadSinglePdf}
                   title="Descargar PDF 45x130mm listo para imprenta"
-                  className="bg-[#532C8C] hover:bg-[#432172] text-white font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
+                  className="bg-[#532C8C] hover:bg-[#432172] text-white font-extrabold text-[10px] py-2 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
                 >
-                  <FileText className="w-3.5 h-3.5 text-purple-200" />
+                  <FileText className="w-3 h-3 text-purple-200" />
                   <span>PDF 45x130</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadSingleJpg}
+                  title="Descargar JPG oficial en alta resolución 300 ppp"
+                  className="bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-[10px] py-2 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
+                >
+                  <ImageIcon className="w-3 h-3 text-teal-200" />
+                  <span>JPG 300ppp</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handlePrintCurrent}
                   title="Imprimir troquel a escala 1:1"
-                  className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-extrabold text-[11px] py-2.5 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
+                  className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-extrabold text-[10px] py-2 rounded-xl flex items-center justify-center gap-1 transition-all shadow-sm cursor-pointer"
                 >
-                  <Printer className="w-3.5 h-3.5 text-slate-600" />
+                  <Printer className="w-3 h-3 text-slate-600" />
                   <span>Imprimir</span>
                 </button>
               </div>
@@ -641,21 +696,47 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
               <button
                 type="button"
                 disabled={isExporting}
-                onClick={() => handleExportZip()}
+                onClick={() => handleExportJpgStrip()}
+                title="Tira continua en formato JPG a 300 ppp (tal cual la segunda foto)"
+                className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              >
+                <ImageIcon className="w-3.5 h-3.5 text-slate-950" />
+                <span>Tira JPG (300 ppp)</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isExporting}
+                onClick={() => handleExportJpgZip()}
+                title="Lote de stickers individuales JPG a 300 ppp en ZIP"
                 className="bg-white/15 hover:bg-white/25 active:scale-95 text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 border border-white/20 transition-all cursor-pointer disabled:opacity-50"
               >
                 <Layers className="w-3.5 h-3.5 text-teal-300" />
-                <span>{isExporting ? 'Generando...' : 'Lote ZIP (SVGs)'}</span>
+                <span>Pack JPGs (300 ppp)</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={isExporting}
+                onClick={() => handleExportZip()}
+                title="Descargar lote en formato SVG vectorial puro"
+                className="bg-white/10 hover:bg-white/20 text-white font-bold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1 border border-white/15 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Download className="w-3 h-3 text-purple-200" />
+                <span>Lote SVGs</span>
               </button>
 
               <button
                 type="button"
                 disabled={isExporting}
                 onClick={() => handleExportPliegoPdf()}
-                className="bg-[#00A896] hover:bg-[#008677] active:scale-95 text-white font-extrabold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                title="Pliego A3 con 15 stickers por hoja"
+                className="bg-white/10 hover:bg-white/20 text-white font-bold text-[11px] py-2 rounded-xl flex items-center justify-center gap-1 border border-white/15 transition-all cursor-pointer disabled:opacity-50"
               >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Pliego A3 (15/hoja)</span>
+                <FileText className="w-3 h-3 text-purple-200" />
+                <span>Pliego A3 PDF</span>
               </button>
             </div>
 
@@ -1609,39 +1690,69 @@ export default function QrManagerView({ searchQuery = '', onGoToExporter }) {
             </div>
 
             {/* BOTONES DE EXPORTACIÓN */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center gap-2">
+            <div className="pt-2 flex flex-col gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={async () => {
+                    setShowPrintModal(false);
+                    await handleExportJpgStrip(printExportCount);
+                  }}
+                  className="w-full bg-[#00A896] hover:bg-[#008677] active:scale-95 text-white font-extrabold py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md text-xs flex items-center justify-center gap-1.5"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>Tira JPG 300 ppp ({printExportCount} Stickers)</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={async () => {
+                    setShowPrintModal(false);
+                    await handleExportJpgZip(printExportCount);
+                  }}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Layers className="w-3.5 h-3.5 text-teal-300" />
+                  <span>Pack JPGs 300 ppp (ZIP)</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={async () => {
+                    setShowPrintModal(false);
+                    await handleExportPliegoPdf(printExportCount);
+                  }}
+                  className="w-full bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-extrabold py-2 px-3 rounded-xl transition-all cursor-pointer text-xs flex items-center justify-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5 text-purple-700" />
+                  <span>Pliego A3 PDF ({printExportCount})</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={async () => {
+                    setShowPrintModal(false);
+                    await handleExportZip(printExportCount);
+                  }}
+                  className="w-full bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-extrabold py-2 px-3 rounded-xl transition-all cursor-pointer text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Lote SVGs Vectoriales</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={() => setShowPrintModal(false)}
-                className="w-full sm:w-auto px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition-all cursor-pointer text-xs"
+                className="w-full mt-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-xl transition-all cursor-pointer text-xs"
               >
                 Cerrar
-              </button>
-
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={async () => {
-                  setShowPrintModal(false);
-                  await handleExportZip(printExportCount);
-                }}
-                className="flex-1 w-full bg-slate-900 hover:bg-slate-800 text-white font-extrabold py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md text-xs flex items-center justify-center gap-1.5"
-              >
-                <Download className="w-3.5 h-3.5 text-teal-300" />
-                <span>Exportar Lote ZIP ({printExportCount} SVGs)</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={async () => {
-                  setShowPrintModal(false);
-                  await handleExportPliegoPdf(printExportCount);
-                }}
-                className="flex-1 w-full bg-[#00A896] hover:bg-[#008677] active:scale-95 text-white font-extrabold py-2.5 px-3 rounded-xl transition-all cursor-pointer shadow-md text-xs flex items-center justify-center gap-1.5"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Pliego A3 ({printExportCount} Stickers)</span>
               </button>
             </div>
           </div>

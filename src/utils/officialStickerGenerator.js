@@ -149,8 +149,29 @@ export async function renderOfficialStickerToCanvas(sku, targetUrl, canvas, prin
     img.src = dataUrl;
   });
 
-  ctx.clearRect(0, 0, widthPx, heightPx);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, widthPx, heightPx);
   ctx.drawImage(img, 0, 0, widthPx, heightPx);
+}
+
+/**
+ * Descarga individual en formato JPG a 300 ppp (531 x 1535 px)
+ */
+export async function exportOfficialStickerJpg(sku, targetUrl, printConfig = {}) {
+  const cleanSku = (sku || 'EV3362VE').replace(/[#-]/g, '').toUpperCase();
+  const canvas = document.createElement('canvas');
+  await renderOfficialStickerToCanvas(cleanSku, targetUrl, canvas, printConfig);
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Sticker_Imprenta_${cleanSku}_300DPI.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 'image/jpeg', 0.98);
 }
 
 /**
@@ -306,4 +327,119 @@ export async function exportBatchOfficialPliegoPdf(qrs, getBaseUrl, printConfig 
   }
 
   doc.save(`Pliego_Imprenta_A3_EscudoVial_${qrs.length}_stickers.pdf`);
+}
+
+/**
+ * Exporta una tira vertical continua en formato JPG a 300 ppp (tal cual la segunda foto),
+ * con todos los stickers ordenados verticalmente a resolución completa de imprenta (300 ppp).
+ */
+export async function exportContinuousJpgStrip(qrs, getBaseUrl, printConfig = {}) {
+  if (!qrs || qrs.length === 0) return;
+
+  const stickerW = 531;  // 45mm a 300 DPI
+  const stickerH = 1535; // 130mm a 300 DPI
+  const gapY = 24;       // separación sutil entre stickers (aprox 2mm a 300 DPI)
+
+  // Dividir en tiras si son más de 15 para respetar límites de memoria canvas
+  const chunkSize = 15;
+  const numChunks = Math.ceil(qrs.length / chunkSize);
+
+  for (let chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
+    const chunkQrs = qrs.slice(chunkIdx * chunkSize, (chunkIdx + 1) * chunkSize);
+    const totalH = chunkQrs.length * stickerH + (chunkQrs.length - 1) * gapY;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = stickerW;
+    canvas.height = totalH;
+    const ctx = canvas.getContext('2d');
+
+    // Fondo blanco puro para JPG
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, stickerW, totalH);
+
+    for (let i = 0; i < chunkQrs.length; i++) {
+      const q = chunkQrs[i];
+      const cleanSku = q.sku.replace(/[#-]/g, '').toUpperCase();
+      const targetUrl = `${getBaseUrl()}/v/${cleanSku}`;
+
+      const itemCanvas = document.createElement('canvas');
+      await renderOfficialStickerToCanvas(cleanSku, targetUrl, itemCanvas, printConfig);
+
+      const y = i * (stickerH + gapY);
+      ctx.drawImage(itemCanvas, 0, y, stickerW, stickerH);
+    }
+
+    await new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const partSuffix = numChunks > 1 ? `_Parte_${chunkIdx + 1}` : '';
+        a.download = `Tira_Continua_Imprenta_${chunkQrs.length}_Stickers_300DPI${partSuffix}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setTimeout(resolve, 300);
+      }, 'image/jpeg', 0.98);
+    });
+  }
+}
+
+/**
+ * Exporta paquete ZIP con todos los stickers individuales en JPG a 300 ppp + la tira continua en JPG
+ */
+export async function exportBatchJpgZip(qrs, getBaseUrl, printConfig = {}) {
+  if (!qrs || qrs.length === 0) return;
+  const zip = new JSZip();
+  const jpgFolder = zip.folder("Stickers_JPG_300DPI");
+
+  const stickerW = 531;
+  const stickerH = 1535;
+  const gapY = 24;
+  const totalH = qrs.length * stickerH + (qrs.length - 1) * gapY;
+
+  // Tira continua
+  const stripCanvas = document.createElement('canvas');
+  stripCanvas.width = stickerW;
+  stripCanvas.height = Math.min(totalH, 30000);
+  const stripCtx = stripCanvas.getContext('2d');
+  stripCtx.fillStyle = '#FFFFFF';
+  stripCtx.fillRect(0, 0, stripCanvas.width, stripCanvas.height);
+
+  for (let i = 0; i < qrs.length; i++) {
+    const q = qrs[i];
+    const cleanSku = q.sku.replace(/[#-]/g, '').toUpperCase();
+    const targetUrl = `${getBaseUrl()}/v/${cleanSku}`;
+
+    const canvas = document.createElement('canvas');
+    await renderOfficialStickerToCanvas(cleanSku, targetUrl, canvas, printConfig);
+
+    // 1. Guardar individual JPG 300 DPI
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.98);
+    const base64Data = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+    jpgFolder.file(`Sticker_${cleanSku}_300DPI.jpg`, base64Data, { base64: true });
+
+    // 2. Dibujar en la tira si no excede límite de altura
+    const y = i * (stickerH + gapY);
+    if (y + stickerH <= stripCanvas.height) {
+      stripCtx.drawImage(canvas, 0, y, stickerW, stickerH);
+    }
+  }
+
+  // Guardar tira en el ZIP
+  const stripDataUrl = stripCanvas.toDataURL('image/jpeg', 0.98);
+  const stripBase64 = stripDataUrl.replace(/^data:image\/jpeg;base64,/, '');
+  zip.file(`Tira_Continua_Imprenta_${qrs.length}_Stickers_300DPI.jpg`, stripBase64, { base64: true });
+
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(zipBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Lote_Stickers_JPG_300DPI_${qrs.length}_unidades.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
