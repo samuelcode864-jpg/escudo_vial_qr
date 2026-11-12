@@ -124,37 +124,70 @@ export default function TacticalLeafletMap({
       const lng = emg.location?.lng || defaultCenter[1];
       const isSelected = selectedEmergency?.id === emg.id;
       const isResolved = emg.status === 'resuelto';
+      const isCrit = emg.status === 'critico';
 
-      // HTML interactivo para el Pin
-      const pinColor = isResolved 
-        ? 'bg-slate-800 border-slate-600 text-slate-300' 
-        : emg.status === 'critico'
-          ? 'bg-rose-600 border-white text-white shadow-rose-600/60'
-          : 'bg-teal-600 border-white text-white shadow-teal-600/60';
+      // Detección de tipo de vehículo para icono táctico
+      const vehLower = (emg.vehicle || '').toLowerCase();
+      const isMoto = vehLower.includes('moto') || vehLower.includes('bera') || vehLower.includes('empire') || vehLower.includes('md') || vehLower.includes('honda');
+      const isTruck = vehLower.includes('camion') || vehLower.includes('gandola') || vehLower.includes('carga') || vehLower.includes('f-150') || vehLower.includes('silverado');
+      const vehIcon = isMoto ? 'two_wheeler' : isTruck ? 'local_shipping' : 'directions_car';
 
-      const pulseHtml = !isResolved 
-        ? `<div class="absolute -inset-3.5 rounded-full animate-ping opacity-75 ${emg.status === 'critico' ? 'bg-rose-500' : 'bg-teal-500'}"></div>` 
-        : '';
+      // Colores de gradiente según estado
+      const mainGradient = isResolved 
+        ? 'from-slate-700 via-slate-800 to-slate-900 border-slate-400/80 shadow-slate-900/50' 
+        : isCrit
+          ? 'from-rose-500 via-rose-600 to-red-700 border-white shadow-rose-600/60'
+          : 'from-[#00A896] via-[#008f80] to-[#016e63] border-white shadow-teal-700/60';
+
+      const needleBorder = isResolved ? 'border-t-slate-900' : isCrit ? 'border-t-red-700' : 'border-t-[#016e63]';
+      const pulseColor = isCrit ? 'bg-rose-500' : 'bg-teal-400';
+
+      // Segunda línea de datos: Placa o modelo corto
+      const plateOrModel = emg.plate || (emg.vehicle ? emg.vehicle.replace(/\s*\([^)]*\)\s*$/, '').trim() : 'SOS 24/7');
+
+      // Ondas concéntricas de radar para llamadas activas
+      const radarPulseHtml = !isResolved ? `
+        <div class="absolute -inset-2.5 rounded-full ${pulseColor} opacity-40 animate-ping pointer-events-none"></div>
+        <div class="absolute -inset-1 rounded-full ${pulseColor} opacity-50 animate-pulse pointer-events-none"></div>
+      ` : '';
 
       const iconHtml = `
-        <div class="relative cursor-pointer transition-transform transform ${isSelected ? 'scale-125 z-50' : 'hover:scale-110 z-20'}">
-          ${pulseHtml}
-          <div class="relative px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-xl border-2 font-sans ${pinColor}">
-            <span class="material-symbols-outlined text-[15px] font-bold">
-              ${isResolved ? 'check_circle' : 'e911_emergency'}
-            </span>
-            <span class="font-mono text-[11px] font-black tracking-tight">
-              ${emg.sku}
-            </span>
+        <div class="relative flex flex-col items-center cursor-pointer transition-all duration-200 transform ${isSelected ? 'scale-115 z-50' : 'hover:scale-105 z-20'}" style="width: 126px;">
+          ${radarPulseHtml}
+          
+          <!-- Cápsula Táctica Principal -->
+          <div class="relative w-full bg-gradient-to-b ${mainGradient} text-white px-2.5 py-1.5 rounded-2xl shadow-2xl border-[2px] flex items-center gap-2 select-none">
+            <!-- Icono con círculo interior -->
+            <div class="w-7 h-7 rounded-xl bg-black/25 flex items-center justify-center shrink-0 border border-white/20">
+              <span class="material-symbols-outlined text-[16px] text-white">
+                ${isResolved ? 'check_circle' : isCrit ? 'e911_emergency' : vehIcon}
+              </span>
+            </div>
+
+            <!-- Identificadores: SKU arriba y Placa/Modelo abajo (Sin cortes) -->
+            <div class="flex flex-col min-w-0 leading-tight">
+              <span class="font-mono text-[11px] font-black tracking-wide truncate text-white drop-shadow-xs">
+                ${emg.sku}
+              </span>
+              <span class="text-[9px] font-bold text-white/90 truncate max-w-[70px] uppercase tracking-tighter">
+                ${plateOrModel}
+              </span>
+            </div>
           </div>
+
+          <!-- Puntero / Aguja Táctica que señala la calle exacta -->
+          <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[7px] ${needleBorder} -mt-[1px] drop-shadow-xs"></div>
+
+          <!-- Punto de impacto exacto en el mapa -->
+          <div class="w-2.5 h-2.5 rounded-full ${isResolved ? 'bg-slate-300' : isCrit ? 'bg-rose-500' : 'bg-teal-400'} border-2 border-white shadow-md -mt-[2px]"></div>
         </div>
       `;
 
       const customIcon = L.divIcon({
         html: iconHtml,
         className: 'custom-radar-marker',
-        iconSize: [80, 36],
-        iconAnchor: [40, 18]
+        iconSize: [126, 52],
+        iconAnchor: [63, 50]
       });
 
       const marker = L.marker([lat, lng], { icon: customIcon });
@@ -178,7 +211,7 @@ export default function TacticalLeafletMap({
 
       marker.bindPopup(popupContent, {
         closeButton: false,
-        offset: [0, -10]
+        offset: [0, -42]
       });
 
       marker.on('click', () => {
