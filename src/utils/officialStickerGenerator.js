@@ -71,13 +71,13 @@ export function generateOfficialStickerSvg(sku, targetUrl, printConfig = {}) {
   // Reemplazar el texto "QR0001" superior centrando el SKU real
   svg = svg.replace(
     /<text transform="matrix\(1 0 0 1 46\.6963 139\.3701\)"[^>]*>QR0001<\/text>/,
-    `<text x="64.356" y="139.3701" text-anchor="middle" font-family="'Arial-BoldMT', Arial, sans-serif" font-weight="bold" font-size="8.9831" fill="#000000">${cleanSku}</text>`
+    `<text x="64.356" y="139.3701" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="8.9831" fill="#000000">${cleanSku}</text>`
   );
 
   // Reemplazar el texto "QR0001" inferior centrando el SKU real
   svg = svg.replace(
     /<text transform="matrix\(1 0 0 1 38\.3418 292\.6177\)"[^>]*>QR0001<\/text>/,
-    `<text x="64.356" y="292.6177" text-anchor="middle" font-family="'Arial-BoldMT', Arial, sans-serif" font-weight="bold" font-size="13.2345" fill="#000000">${cleanSku}</text>`
+    `<text x="64.356" y="292.6177" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="13.2345" fill="#000000">${cleanSku}</text>`
   );
 
   // --- CONFIGURACIÓN DE IMPRESIÓN PERSONALIZADA ---
@@ -107,7 +107,7 @@ export function generateOfficialStickerSvg(sku, targetUrl, printConfig = {}) {
     const batchText = (config.batchCodeText || 'L1C').trim();
     svg = svg.replace(
       /<text transform="matrix\(0 -1\.0007 1 0 11\.8584 169\.7095\)"[^>]*>L1C0<\/text>/,
-      `<text transform="matrix(0 -1.0007 1 0 11.8584 169.7095)" font-family="'Calibri', Arial, sans-serif" font-size="5.9887">${batchText}</text>`
+      `<text transform="matrix(0 -1.0007 1 0 11.8584 169.7095)" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="5.9887">${batchText}</text>`
     );
   } else {
     svg = svg.replace(

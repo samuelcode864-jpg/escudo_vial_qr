@@ -4,6 +4,9 @@
 <svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
 	 width="127.559px" height="368.504px" viewBox="0 0 127.559 368.504" enable-background="new 0 0 127.559 368.504"
 	 xml:space="preserve">
+<style type="text/css">
+	text { font-family: Arial, Helvetica, sans-serif !important; }
+</style>
 <g>
 	<g>
 		<rect x="2.319" y="0" fill="#E9F2F5" width="124.063" height="368.504"/>
@@ -216,9 +219,9 @@
 				c0.068-0.292,0.127-0.533,0.184-0.773C75.644,32.598,75.683,32.599,75.718,32.599"/>
 		</g>
 	</g>
-	<text transform="matrix(1 0 0 1 26.7305 341.4087)" font-family="'Arial-BoldMT'" font-size="10.3131">ESCANEA PARA</text>
-	<text transform="matrix(1 0 0 1 13.3545 350.9927)" font-family="'Arial-BoldMT'" font-size="8.5221">SOLICITAR ASISTENCIA</text>
-	<text transform="matrix(0 -1.0007 1 0 11.8584 169.7095)" font-family="'Calibri'" font-size="5.9887">L1C0</text>
+	<text transform="matrix(1 0 0 1 26.7305 341.4087)" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="10.3131">ESCANEA PARA</text>
+	<text transform="matrix(1 0 0 1 13.3545 350.9927)" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="8.5221">SOLICITAR ASISTENCIA</text>
+	<text transform="matrix(0 -1.0007 1 0 11.8584 169.7095)" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="5.9887">L1C0</text>
 	<g>
 		<g>
 			<path fill="#FFFFFF" d="M91.218,159.968H37.483c-3.131,0-5.67-2.539-5.67-5.67V58.124c0-3.132,2.539-5.67,5.67-5.67h53.734
@@ -233,7 +236,7 @@
 		</g>
 		<polygon fill="#4B2C84" points="92.941,57.113 91.15,55.692 37.483,55.692 35.483,57.071 34.393,59.697 34.393,66.583 
 			64.509,76.583 94.624,66.583 94.624,59.488 		"/>
-		<text transform="matrix(1 0 0 1 46.6963 139.3701)" font-family="'Arial-BoldMT'" font-size="8.9831">QR0001</text>
+		<text transform="matrix(1 0 0 1 46.6963 139.3701)" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="8.9831">QR0001</text>
 		<g>
 			<path d="M45.403,91.265h9.047 M59.619,91.265h6.463 M67.373,91.265h5.17 M73.836,91.265h9.047 M45.403,92.557h1.292
 				 M53.157,92.557h1.293 M59.619,92.557h1.292 M64.789,92.557h1.293 M67.373,92.557h1.293 M71.252,92.557h1.291 M73.836,92.557
@@ -373,9 +376,9 @@
 				c-2.945,0-5.333-2.453-5.333-5.477V59.89c0-3.025,2.388-5.477,5.333-5.477h50.543c2.945,0,5.333,2.452,5.333,5.477v92.902
 				C94.965,155.816,92.577,158.269,89.632,158.269z"/>
 		</g>
-		<text transform="matrix(1 0 0 1 39.2441 149.1089)" fill="#4B2C84" font-family="'Arial-BoldMT'" font-size="8.9831">ESCANEAR</text>
-		<text transform="matrix(1 0 0 1 39.5488 153.4585)" fill="#E00707" font-family="'Arial-BoldMT'" font-size="3.7929">EN CASO DE EMERGENCIA</text>
-		<text transform="matrix(1 0 0 1 45.4033 82.5068)" fill="#4B2C84" font-family="'Arial-Black'" font-size="5">ESCUDO VIAL</text>
+		<text transform="matrix(1 0 0 1 39.2441 149.1089)" fill="#4B2C84" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="8.9831">ESCANEAR</text>
+		<text transform="matrix(1 0 0 1 39.5488 153.4585)" fill="#E00707" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="3.7929">EN CASO DE EMERGENCIA</text>
+		<text transform="matrix(1 0 0 1 45.4033 82.5068)" fill="#4B2C84" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="5">ESCUDO VIAL</text>
 		<g>
 			<g opacity="0.5">
 				<path d="M57.812,68.804c-1.503-2.634-2.165-5.437-2.047-8.449h0.208c0.884,0,1.765-0.048,2.644-0.179
@@ -797,7 +800,7 @@
 		</g>
 		<polygon fill="#4B2C84" points="106.473,171.431 103.833,169.337 24.769,169.337 21.821,171.368 20.215,175.235 20.215,185.381 
 			64.584,200.114 108.951,185.381 108.951,174.928 		"/>
-		<text transform="matrix(1 0 0 1 38.3418 292.6177)" font-family="'Arial-BoldMT'" font-size="13.2345">QR0001</text>
+		<text transform="matrix(1 0 0 1 38.3418 292.6177)" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="13.2345">QR0001</text>
 		<g>
 			<path d="M36.437,221.745h13.328 M57.38,221.745h9.521 M68.804,221.745h7.617 M78.325,221.745h13.328 M36.437,223.647h1.904
 				 M47.86,223.647h1.904 M57.38,223.647h1.904 M64.997,223.647h1.904 M68.804,223.647h1.904 M74.519,223.647h1.902 M78.325,223.647
@@ -939,9 +942,9 @@
 				c-4.339,0-7.857-3.612-7.857-8.069V175.521c0-4.458,3.519-8.069,7.857-8.069h74.462c4.341,0,7.857,3.611,7.857,8.069v136.867
 				C109.453,316.845,105.937,320.458,101.596,320.458z"/>
 		</g>
-		<text transform="matrix(1 0 0 1 27.3633 306.9653)" fill="#4B2C84" font-family="'Arial-BoldMT'" font-size="13.2345">ESCANEAR</text>
-		<text transform="matrix(1 0 0 1 27.8105 313.3716)" fill="#E00707" font-family="'Arial-BoldMT'" font-size="5.5879">EN CASO DE EMERGENCIA</text>
-		<text transform="matrix(1 0 0 1 33.7559 208.8423)" fill="#4B2C84" font-family="'Arial-Black'" font-size="8">ESCUDO VIAL</text>
+		<text transform="matrix(1 0 0 1 27.3633 306.9653)" fill="#4B2C84" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="13.2345">ESCANEAR</text>
+		<text transform="matrix(1 0 0 1 27.8105 313.3716)" fill="#E00707" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="5.5879">EN CASO DE EMERGENCIA</text>
+		<text transform="matrix(1 0 0 1 33.7559 208.8423)" fill="#4B2C84" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="8">ESCUDO VIAL</text>
 		<g>
 			<g opacity="0.5">
 				<path d="M54.717,188.653c-2.215-3.881-3.189-8.009-3.016-12.448h0.307c1.303,0,2.601-0.069,3.895-0.265
