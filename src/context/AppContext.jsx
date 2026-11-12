@@ -182,13 +182,21 @@ export function AppProvider({ children }) {
             const clean = (q.sku || '').toUpperCase();
             if (clean && !seen.has(clean)) {
               seen.add(clean);
+              const isPrintedFromDb = Boolean(q.isPrinted);
+              const isPrintedFromLocal = Boolean(printedMap[clean]);
+              const effectivePrinted = isPrintedFromDb || isPrintedFromLocal;
+              const effectivePrintedAt = q.printedAt || printedMap[clean] || null;
+              if (effectivePrinted) {
+                printedMap[clean] = effectivePrintedAt || new Date().toISOString();
+              }
               deduped.push({
                 ...q,
-                isPrinted: Boolean(printedMap[clean] || q.isPrinted),
-                printedAt: printedMap[clean] || q.printedAt || null
+                isPrinted: effectivePrinted,
+                printedAt: effectivePrinted ? (effectivePrintedAt || new Date().toISOString()) : null
               });
             }
           }
+          savePrintedSkusMap(printedMap);
           setQrList(deduped);
           localStorage.setItem('ev_qr_list', JSON.stringify(deduped));
         }
@@ -241,10 +249,19 @@ export function AppProvider({ children }) {
             const rawUpdated = mapQrFromDb(payload.new);
             const printedMap = getPrintedSkusMap();
             const clean = (rawUpdated.sku || '').toUpperCase();
+            const isPrinted = Boolean(rawUpdated.isPrinted !== undefined ? rawUpdated.isPrinted : printedMap[clean]);
+            const printedAt = rawUpdated.printedAt || printedMap[clean] || null;
+            if (isPrinted) {
+              printedMap[clean] = printedAt || new Date().toISOString();
+            } else {
+              delete printedMap[clean];
+            }
+            savePrintedSkusMap(printedMap);
+
             const updatedQr = {
               ...rawUpdated,
-              isPrinted: Boolean(printedMap[clean] || rawUpdated.isPrinted),
-              printedAt: printedMap[clean] || rawUpdated.printedAt || null
+              isPrinted,
+              printedAt
             };
             setQrList(prev => {
               const idx = prev.findIndex(q => q.sku.toUpperCase() === clean);
@@ -1048,6 +1065,19 @@ export function AppProvider({ children }) {
       }
       return q;
     }));
+
+    // Sincronizar en tiempo real con Supabase para que todas las computadoras lo vean
+    if (isSupabaseConfigured && supabase) {
+      skuSet.forEach(async (cleanSku) => {
+        try {
+          const item = qrList.find(q => q.sku.toUpperCase() === cleanSku);
+          const holderData = { ...(item?.holder || {}), isPrinted: true, printedAt: now };
+          await supabase.from('qrs').update({ holder: holderData }).eq('sku', cleanSku);
+        } catch (err) {
+          console.warn(`Error actualizando estado impreso de ${cleanSku} en Supabase:`, err);
+        }
+      });
+    }
   };
 
   const markQrsAsPending = (skus = []) => {
@@ -1066,6 +1096,22 @@ export function AppProvider({ children }) {
       }
       return q;
     }));
+
+    // Sincronizar en tiempo real con Supabase
+    if (isSupabaseConfigured && supabase) {
+      skuSet.forEach(async (cleanSku) => {
+        try {
+          const item = qrList.find(q => q.sku.toUpperCase() === cleanSku);
+          const holderData = { ...(item?.holder || {}) };
+          delete holderData.isPrinted;
+          delete holderData.printedAt;
+          const finalHolder = Object.keys(holderData).length > 0 ? holderData : null;
+          await supabase.from('qrs').update({ holder: finalHolder }).eq('sku', cleanSku);
+        } catch (err) {
+          console.warn(`Error restableciendo pendiente de ${cleanSku} en Supabase:`, err);
+        }
+      });
+    }
   };
 
   const toggleQrPrinted = (sku) => {
@@ -1091,6 +1137,27 @@ export function AppProvider({ children }) {
       }
       return q;
     }));
+
+    // Sincronizar en tiempo real con Supabase
+    if (isSupabaseConfigured && supabase) {
+      (async () => {
+        try {
+          const item = qrList.find(q => q.sku.toUpperCase() === clean);
+          const holderData = { ...(item?.holder || {}) };
+          if (isCurrentlyPrinted) {
+            delete holderData.isPrinted;
+            delete holderData.printedAt;
+          } else {
+            holderData.isPrinted = true;
+            holderData.printedAt = now;
+          }
+          const finalHolder = Object.keys(holderData).length > 0 ? holderData : null;
+          await supabase.from('qrs').update({ holder: finalHolder }).eq('sku', clean);
+        } catch (err) {
+          console.warn(`Error alternando estado de ${clean} en Supabase:`, err);
+        }
+      })();
+    }
   };
 
   const clearAllData = () => {

@@ -26,6 +26,8 @@ export const supabase = isSupabaseConfigured
 
 export function mapQrFromDb(row) {
   if (!row) return null;
+  const isPrinted = Boolean(row.holder?.isPrinted);
+  const printedAt = row.holder?.printedAt || null;
   return {
     sku: row.sku,
     category: row.category || 'Auto',
@@ -33,19 +35,26 @@ export function mapQrFromDb(row) {
     scansCount: row.scans_count || 0,
     activatedAt: row.activated_at || null,
     holder: row.holder || null,
-    lastLocation: row.last_location || null
+    lastLocation: row.last_location || null,
+    isPrinted,
+    printedAt
   };
 }
 
 export function mapQrToDb(qr) {
   if (!qr) return null;
+  const holderData = qr.holder ? { ...qr.holder } : {};
+  if (qr.isPrinted !== undefined) {
+    holderData.isPrinted = Boolean(qr.isPrinted);
+    holderData.printedAt = qr.printedAt || null;
+  }
   return {
     sku: qr.sku,
     category: qr.category || 'Auto',
     status: qr.status || 'inactive',
     scans_count: qr.scansCount || 0,
     activated_at: qr.activatedAt || null,
-    holder: qr.holder || null,
+    holder: Object.keys(holderData).length > 0 ? holderData : null,
     last_location: qr.lastLocation || null
   };
 }
