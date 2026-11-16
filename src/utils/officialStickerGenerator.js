@@ -507,8 +507,8 @@ export async function exportCanvasRollPdf(qrs, getBaseUrl, canvasConfig = {}, pr
   const layout = calculateCanvasRollLayout(canvasConfig);
   const { canvasWidthMm, canvasHeightMm, cols, rows, totalStickers, gapXMm, gapYMm, marginMm, offsetX, stickerWidth, stickerHeight } = layout;
 
-  // Importar dinámicamente el plugin vectorial svg2pdf para jsPDF
-  await import('svg2pdf.js');
+  // Importar dinámicamente el plugin vectorial svg2pdf para jsPDF (empaquetado localmente)
+  await import('./svg2pdf.js');
 
   const orientation = canvasWidthMm > canvasHeightMm ? 'landscape' : 'portrait';
   const doc = new jsPDF({
