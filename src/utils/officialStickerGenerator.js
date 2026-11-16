@@ -500,15 +500,12 @@ function convertPdfToCmyk(pdfString) {
 }
 
 /**
- * Exporta un lienzo / bobina completa en formato PDF 100% VECTORIAL en espacio de color CMYK.
- * Cada sticker es renderizado con vectores puros milimétricos y trazados de corte en Magenta puro CMYK.
+ * Exporta un lienzo / bobina completa en formato PDF en alta resolución con vectores de corte en espacio CMYK.
+ * Cada sticker es renderizado a 300 DPI y los trazados de troquelado son vectores puros en Magenta CMYK (0,100,0,0).
  */
 export async function exportCanvasRollPdf(qrs, getBaseUrl, canvasConfig = {}, printConfig = {}) {
   const layout = calculateCanvasRollLayout(canvasConfig);
   const { canvasWidthMm, canvasHeightMm, cols, rows, totalStickers, gapXMm, gapYMm, marginMm, offsetX, stickerWidth, stickerHeight } = layout;
-
-  // Importar dinámicamente el plugin vectorial svg2pdf para jsPDF (empaquetado localmente)
-  await import('./svg2pdf.js');
 
   const orientation = canvasWidthMm > canvasHeightMm ? 'landscape' : 'portrait';
   const doc = new jsPDF({
@@ -517,7 +514,7 @@ export async function exportCanvasRollPdf(qrs, getBaseUrl, canvasConfig = {}, pr
     format: [canvasWidthMm, canvasHeightMm]
   });
 
-  const parser = new DOMParser();
+  const canvas = document.createElement('canvas');
 
   for (let i = 0; i < totalStickers; i++) {
     const q = qrs[i] || qrs[i % qrs.length] || { sku: `EV${String(1000 + i).slice(-4)}VE` };
@@ -530,20 +527,26 @@ export async function exportCanvasRollPdf(qrs, getBaseUrl, canvasConfig = {}, pr
     const xMm = offsetX + col * (stickerWidth + gapXMm);
     const yMm = marginMm + row * (stickerHeight + gapYMm);
 
-    // Generar SVG oficial con tipografías y atributos CMYK
-    let stickerSvg = generateOfficialStickerSvg(cleanSku, targetUrl, { ...printConfig, cmykMode: true });
-    stickerSvg = convertSvgToCmyk(stickerSvg);
+    // Renderizar sticker en alta resolución oficial a 300 ppp
+    await renderOfficialStickerToCanvas(cleanSku, targetUrl, canvas, { ...printConfig, cmykMode: true });
+    const imgData = canvas.toDataURL('image/png');
 
-    const svgDoc = parser.parseFromString(stickerSvg, 'image/svg+xml');
-    const svgElement = svgDoc.documentElement;
+    doc.addImage(imgData, 'PNG', xMm, yMm, stickerWidth, stickerHeight, undefined, 'FAST');
 
-    // Renderizar vectores nativos en jsPDF a la coordenada milimétrica exacta
-    await doc.svg(svgElement, {
-      x: xMm,
-      y: yMm,
-      width: stickerWidth,
-      height: stickerHeight
-    });
+    // Vector de corte perimetral en Magenta puro (C:0 M:100 Y:0 K:0)
+    if (printConfig.cutExternal !== false) {
+      doc.setDrawColor(255, 0, 255); // Post-procesado a 100% Magenta CMYK por convertPdfToCmyk
+      doc.setLineWidth(0.1);
+      doc.roundedRect(xMm, yMm, stickerWidth, stickerHeight, 4, 4, 'S');
+    }
+
+    // Troqueles internos vectoriales
+    if (printConfig.cutInternal) {
+      doc.setDrawColor(255, 0, 255);
+      doc.setLineWidth(0.1);
+      doc.circle(xMm + 22.5, yMm + 15, 7.5, 'S');
+      doc.roundedRect(xMm + 8.5, yMm + 68, 28, 28, 2, 2, 'S');
+    }
   }
 
   // Título y datos técnicos de prepress en el margen superior
