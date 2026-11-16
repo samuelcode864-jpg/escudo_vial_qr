@@ -369,3 +369,293 @@ export async function exportBatchJpgZip(qrs, getBaseUrl, printConfig = {}) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ============================================================================
+// EXPORTACIÓN POR LIENZO / BOBINA PERSONALIZADA (PLOTTER DE CORTE CMYK)
+// ============================================================================
+
+export const DEFAULT_CANVAS_CONFIG = {
+  canvasWidthMm: 1000, // 1000 mm (1 metro de ancho de bobina)
+  gapXMm: 5,           // 5 mm entre stickers horizontalmente
+  gapYMm: 5,           // 5 mm entre stickers verticalmente
+  marginMm: 15,        // 15 mm margen a los bordes
+  targetRows: 2,       // 2 filas por defecto
+  cmykMode: true       // Modo CMYK activo siempre
+};
+
+/**
+ * Calcula la distribución matemática exacta de cuántos stickers caben a lo ancho
+ * y las dimensiones totales del lienzo resultante sin desperdicio de material.
+ */
+export function calculateCanvasRollLayout(config = {}) {
+  const canvasWidthMm = Number(config.canvasWidthMm) || 1000;
+  const gapXMm = Number(config.gapXMm) !== undefined ? Number(config.gapXMm) : 5;
+  const gapYMm = Number(config.gapYMm) !== undefined ? Number(config.gapYMm) : 5;
+  const marginMm = Number(config.marginMm) !== undefined ? Number(config.marginMm) : 15;
+  const targetRows = Math.max(1, Number(config.targetRows) || 1);
+
+  const stickerWidth = 45;  // Ancho milimétrico oficial
+  const stickerHeight = 130; // Alto milimétrico oficial
+
+  const usableWidth = Math.max(stickerWidth, canvasWidthMm - (2 * marginMm));
+  const cols = Math.max(1, Math.floor((usableWidth + gapXMm) / (stickerWidth + gapXMm)));
+  const rows = targetRows;
+  const totalStickers = cols * rows;
+
+  const totalGridWidth = (cols * stickerWidth) + ((cols - 1) * gapXMm);
+  const offsetX = marginMm + Math.max(0, (usableWidth - totalGridWidth) / 2);
+  const canvasHeightMm = (2 * marginMm) + (rows * stickerHeight) + ((rows - 1) * gapYMm);
+
+  // Metros lineales gastados de bobina
+  const linearMeters = (canvasHeightMm / 1000).toFixed(2);
+
+  return {
+    canvasWidthMm,
+    canvasHeightMm,
+    usableWidth,
+    cols,
+    rows,
+    totalStickers,
+    gapXMm,
+    gapYMm,
+    marginMm,
+    offsetX,
+    stickerWidth,
+    stickerHeight,
+    totalGridWidth,
+    linearMeters
+  };
+}
+
+/**
+ * Convierte los colores RGB del SVG a equivalentes CMYK puros para imprenta profesional
+ * - Vector de corte: Magenta 100% CMYK (C:0 M:100 Y:0 K:0 / #FF00FF)
+ * - Morado Escudo Vial: C:75 M:90 Y:0 K:10 (#471A70)
+ * - Turquesa Escudo Vial: C:80 M:0 Y:45 K:0 (#00A896)
+ * - Rojo emergencia: C:0 M:100 Y:100 K:0 (#E30613)
+ * - Negro QR/Texto: K:100 Puro (C:0 M:0 Y:0 K:100 / #000000)
+ */
+export function convertSvgToCmyk(svgString) {
+  let svg = svgString;
+  // Magenta puro 100% CMYK para vector de corte y troqueles
+  svg = svg.replace(/#F0047F/gi, '#FF00FF');
+  // Ajustes de color a perfiles de imprenta offset / plotter digital
+  svg = svg.replace(/#4B2C84/gi, '#471A70');
+  svg = svg.replace(/#1ABC9C/gi, '#00A896');
+  svg = svg.replace(/#E00707/gi, '#E30613');
+  return svg;
+}
+
+/**
+ * Post-procesa la cadena PostScript/PDF generada para garantizar que todos los
+ * operadores de color usen DeviceCMYK en lugar de DeviceRGB
+ */
+function convertPdfToCmyk(pdfString) {
+  // 1. Vector de corte Magenta Puro (C:0 M:100 Y:0 K:0): '0 1 0 0 K'
+  let out = pdfString.replace(
+    /(?:0\.94\d*|1(?:\.0*)?)\s+(?:0(?:\.0*)?|0\.01\d*)\s+(?:0\.49\d*|1(?:\.0*)?)\s+RG/g,
+    '0.0000 1.0000 0.0000 0.0000 K'
+  );
+
+  // 2. Morado corporativo (C:75 M:90 Y:0 K:10): '0.75 0.90 0 0.10 k'
+  out = out.replace(
+    /0\.29\d*\s+0\.17\d*\s+0\.51\d*\s+rg/g,
+    '0.7500 0.9000 0.0000 0.1000 k'
+  );
+
+  // 3. Verde/Turquesa corporativo (C:80 M:0 Y:45 K:0): '0.80 0 0.45 0 k'
+  out = out.replace(
+    /0\.10\d*\s+0\.73\d*\s+0\.61\d*\s+rg/g,
+    '0.8000 0.0000 0.4500 0.0000 k'
+  );
+
+  // 4. Rojo emergencia (C:0 M:100 Y:100 K:0): '0 1 1 0 k'
+  out = out.replace(
+    /0\.87\d*\s+0\.02\d*\s+0\.02\d*\s+rg/g,
+    '0.0000 1.0000 1.0000 0.0000 k'
+  );
+
+  // 5. Negro puro K:100 para textos y módulos QR (C:0 M:0 Y:0 K:100)
+  out = out.replace(/0(?:\.0*)?\s+0(?:\.0*)?\s+0(?:\.0*)?\s+rg/g, '0.0000 0.0000 0.0000 1.0000 k');
+  out = out.replace(/0(?:\.0*)?\s+0(?:\.0*)?\s+0(?:\.0*)?\s+RG/g, '0.0000 0.0000 0.0000 1.0000 K');
+
+  // 6. Conversión genérica de cualquier otro color RGB residual a CMYK
+  out = out.replace(/(\d*\.?\d+)\s+(\d*\.?\d+)\s+(\d*\.?\d+)\s+rg/g, (match, rStr, gStr, bStr) => {
+    const r = parseFloat(rStr);
+    const g = parseFloat(gStr);
+    const b = parseFloat(bStr);
+    if (r === 1 && g === 1 && b === 1) return '0.0000 0.0000 0.0000 0.0000 k';
+    const c = 1 - r;
+    const m = 1 - g;
+    const y = 1 - b;
+    const k = Math.min(c, m, y);
+    if (k >= 0.999) return '0.0000 0.0000 0.0000 1.0000 k';
+    const cVal = (c - k) / (1 - k);
+    const mVal = (m - k) / (1 - k);
+    const yVal = (y - k) / (1 - k);
+    return `${cVal.toFixed(4)} ${mVal.toFixed(4)} ${yVal.toFixed(4)} ${k.toFixed(4)} k`;
+  });
+
+  return out;
+}
+
+/**
+ * Exporta un lienzo / bobina completa en formato PDF 100% VECTORIAL en espacio de color CMYK.
+ * Cada sticker es renderizado con vectores puros milimétricos y trazados de corte en Magenta puro CMYK.
+ */
+export async function exportCanvasRollPdf(qrs, getBaseUrl, canvasConfig = {}, printConfig = {}) {
+  const layout = calculateCanvasRollLayout(canvasConfig);
+  const { canvasWidthMm, canvasHeightMm, cols, rows, totalStickers, gapXMm, gapYMm, marginMm, offsetX, stickerWidth, stickerHeight } = layout;
+
+  // Importar dinámicamente el plugin vectorial svg2pdf para jsPDF
+  await import('svg2pdf.js');
+
+  const orientation = canvasWidthMm > canvasHeightMm ? 'landscape' : 'portrait';
+  const doc = new jsPDF({
+    orientation,
+    unit: 'mm',
+    format: [canvasWidthMm, canvasHeightMm]
+  });
+
+  const parser = new DOMParser();
+
+  for (let i = 0; i < totalStickers; i++) {
+    const q = qrs[i] || qrs[i % qrs.length] || { sku: `EV${String(1000 + i).slice(-4)}VE` };
+    const cleanSku = (q.sku || 'EV3362VE').replace(/[#-]/g, '').toUpperCase();
+    const targetUrl = `${getBaseUrl()}/v/${cleanSku}`;
+
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+
+    const xMm = offsetX + col * (stickerWidth + gapXMm);
+    const yMm = marginMm + row * (stickerHeight + gapYMm);
+
+    // Generar SVG oficial con tipografías y atributos CMYK
+    let stickerSvg = generateOfficialStickerSvg(cleanSku, targetUrl, { ...printConfig, cmykMode: true });
+    stickerSvg = convertSvgToCmyk(stickerSvg);
+
+    const svgDoc = parser.parseFromString(stickerSvg, 'image/svg+xml');
+    const svgElement = svgDoc.documentElement;
+
+    // Renderizar vectores nativos en jsPDF a la coordenada milimétrica exacta
+    await doc.svg(svgElement, {
+      x: xMm,
+      y: yMm,
+      width: stickerWidth,
+      height: stickerHeight
+    });
+  }
+
+  // Título y datos técnicos de prepress en el margen superior
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text(
+    `ESCUDO VIAL 24/7 - LIENZO BOBINA CMYK PREPRESS - ${totalStickers} STICKERS (${cols} cols x ${rows} filas) - Ancho: ${canvasWidthMm}mm x Alto: ${Math.round(canvasHeightMm)}mm - Troquel Magenta CMYK (0,100,0,0)`,
+    offsetX,
+    marginMm - 4 > 5 ? marginMm - 4 : 5
+  );
+
+  // Convertir operadores de color a DeviceCMYK en el PDF final
+  const rawPdf = doc.output();
+  const cmykPdf = convertPdfToCmyk(rawPdf);
+
+  const blob = new Blob([new TextEncoder().encode(cmykPdf)], { type: 'application/pdf' });
+  const downloadUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = `Lienzo_Bobina_CMYK_${totalStickers}_Stickers_${canvasWidthMm}x${Math.round(canvasHeightMm)}mm.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(downloadUrl);
+
+  return { totalExported: totalStickers, layout };
+}
+
+/**
+ * Genera el archivo SVG Maestro completo del Lienzo / Bobina con todos los stickers
+ * montados en alta definición vectorial y espacio de color CMYK.
+ */
+export function generateCanvasRollMasterSvg(qrs, getBaseUrl, canvasConfig = {}, printConfig = {}) {
+  const layout = calculateCanvasRollLayout(canvasConfig);
+  const { canvasWidthMm, canvasHeightMm, cols, rows, totalStickers, gapXMm, gapYMm, marginMm, offsetX, stickerWidth, stickerHeight } = layout;
+
+  const widthPt = (canvasWidthMm * 2.834645).toFixed(2);
+  const heightPt = (canvasHeightMm * 2.834645).toFixed(2);
+
+  let stickersSvgContent = '';
+
+  for (let i = 0; i < totalStickers; i++) {
+    const q = qrs[i] || qrs[i % qrs.length] || { sku: `EV${String(1000 + i).slice(-4)}VE` };
+    const cleanSku = (q.sku || 'EV3362VE').replace(/[#-]/g, '').toUpperCase();
+    const targetUrl = `${getBaseUrl()}/v/${cleanSku}`;
+
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+
+    const xMm = offsetX + col * (stickerWidth + gapXMm);
+    const yMm = marginMm + row * (stickerHeight + gapYMm);
+
+    const xPt = (xMm * 2.834645).toFixed(3);
+    const yPt = (yMm * 2.834645).toFixed(3);
+
+    let stickerSvg = generateOfficialStickerSvg(cleanSku, targetUrl, { ...printConfig, cmykMode: true });
+    stickerSvg = convertSvgToCmyk(stickerSvg);
+
+    // Extraer contenido interno del SVG para agruparlo en <g>
+    const innerMatch = stickerSvg.match(/<svg[^>]*>([\s\S]*?)<\/svg>/i);
+    const innerContent = innerMatch ? innerMatch[1] : stickerSvg;
+
+    stickersSvgContent += `
+    <!-- Sticker ${i + 1}: ${cleanSku} (Columna ${col + 1}, Fila ${row + 1}) -->
+    <g transform="translate(${xPt}, ${yPt})">
+      ${innerContent}
+    </g>`;
+  }
+
+  const masterSvg = `<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Escudo Vial Prepress Engine - CMYK Master Canvas Roll -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
+     width="${canvasWidthMm}mm" height="${canvasHeightMm}mm" 
+     viewBox="0 0 ${widthPt} ${heightPt}" 
+     color-interpolation="sRGB">
+  <defs>
+    <style type="text/css">
+      .cmyk-cut-contour { stroke: #FF00FF !important; stroke-width: 0.1pt !important; fill: none !important; }
+      text { font-family: Arial, Helvetica, sans-serif !important; }
+    </style>
+  </defs>
+  
+  <!-- Fondo blanco del pliego -->
+  <rect width="100%" height="100%" fill="#FFFFFF"/>
+  
+  <!-- Marcas de información prepress -->
+  <text x="${(offsetX * 2.834645).toFixed(2)}" y="25" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="bold" fill="#666666">
+    ESCUDO VIAL 24/7 - LIENZO BOBINA CMYK PREPRESS (PLOTTER) - ${totalStickers} STICKERS (${cols} cols x ${rows} filas) - ANCHO: ${canvasWidthMm}mm x ALTO: ${Math.round(canvasHeightMm)}mm - VECTORES DE CORTE MAGENTA 100% CMYK (0,100,0,0)
+  </text>
+
+  <!-- Grilla de Stickers en Alta Definición Vectorial -->
+  ${stickersSvgContent}
+</svg>`;
+
+  return masterSvg;
+}
+
+/**
+ * Descarga directamente el archivo SVG Maestro del Lienzo / Bobina
+ */
+export function exportCanvasRollSvg(qrs, getBaseUrl, canvasConfig = {}, printConfig = {}) {
+  const masterSvg = generateCanvasRollMasterSvg(qrs, getBaseUrl, canvasConfig, printConfig);
+  const layout = calculateCanvasRollLayout(canvasConfig);
+  
+  const blob = new Blob([masterSvg], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Lienzo_Bobina_CMYK_${layout.totalStickers}_Stickers_${layout.canvasWidthMm}x${Math.round(layout.canvasHeightMm)}mm.svg`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

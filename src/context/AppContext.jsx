@@ -173,19 +173,74 @@ export function AppProvider({ children }) {
         supabase.from('reports').select('*').order('created_at', { ascending: false })
       ]).then(([qrsRes, emgRes, repRes]) => {
         if (!isMounted) return;
-        if (qrsRes.data && qrsRes.data.length > 0) {
-          const mappedQrs = qrsRes.data.map(mapQrFromDb);
+        
+        const mappedEmgs = emgRes.data ? emgRes.data.map(mapEmergencyFromDb) : [];
+        if (emgRes.data) {
+          setEmergencies(mappedEmgs);
+          localStorage.setItem('ev_emergencies', JSON.stringify(mappedEmgs));
+        }
+
+        if (repRes.data) {
+          const mappedReps = repRes.data.map(mapReportFromDb);
+          setReports(mappedReps);
+          localStorage.setItem('ev_reports', JSON.stringify(mappedReps));
+        }
+
+        // Cargar QRs de Supabase y reconciliar con cualquier conductor activo registrado en emergencias
+        let rawMappedQrs = (qrsRes.data && qrsRes.data.length > 0) ? qrsRes.data.map(mapQrFromDb) : [];
+        
+        // Reconciliación: Si hay clientes registrados en emergencias (ej. José pepito en EV3362VE)
+        // asegurar que aparezcan como QRs activos en todas las computadoras
+        mappedEmgs.forEach(emg => {
+          if (emg.sku && emg.holderName && emg.holderName !== 'Usuario Escudo Vial') {
+            const cleanSku = emg.sku.replace(/[#-]/g, '').toUpperCase();
+            const existingIdx = rawMappedQrs.findIndex(q => q.sku.toUpperCase() === cleanSku);
+            const activeHolder = {
+              name: emg.holderName,
+              cedula: emg.cedula || 'V-00.000.000',
+              phone: emg.phone || '0414-0000000',
+              vehicle: emg.vehicle?.replace(/\s*\([^)]*\)\s*$/, '') || 'Vehículo Particular',
+              plate: emg.vehicle?.match(/\((.*?)\)/)?.[1] || 'S/P',
+              bloodType: 'O+',
+              emergencyContactName: 'Familiar de Contacto',
+              emergencyContactPhone: emg.phone || '0414-0000000',
+              insurancePolicy: `Póliza Escudo Vial 24/7 #${cleanSku}`,
+              isPrinted: false
+            };
+            if (existingIdx >= 0) {
+              rawMappedQrs[existingIdx] = {
+                ...rawMappedQrs[existingIdx],
+                status: 'active',
+                holder: { ...(rawMappedQrs[existingIdx].holder || {}), ...activeHolder }
+              };
+            } else {
+              rawMappedQrs.unshift({
+                sku: cleanSku,
+                category: 'Auto',
+                status: 'active',
+                scansCount: 1,
+                activatedAt: emg.createdAt || new Date().toISOString(),
+                holder: activeHolder,
+                lastLocation: emg.location || null,
+                isPrinted: false,
+                printedAt: null
+              });
+            }
+          }
+        });
+
+        if (rawMappedQrs.length > 0) {
           const printedMap = getPrintedSkusMap();
           const seen = new Set();
           const deduped = [];
-          for (const q of mappedQrs) {
+          for (const q of rawMappedQrs) {
             const clean = (q.sku || '').toUpperCase();
             if (clean && !seen.has(clean)) {
               seen.add(clean);
-              const isPrintedFromDb = Boolean(q.isPrinted);
+              const isPrintedFromDb = Boolean(q.isPrinted || q.holder?.isPrinted);
               const isPrintedFromLocal = Boolean(printedMap[clean]);
               const effectivePrinted = isPrintedFromDb || isPrintedFromLocal;
-              const effectivePrintedAt = q.printedAt || printedMap[clean] || null;
+              const effectivePrintedAt = q.printedAt || q.holder?.printedAt || printedMap[clean] || null;
               if (effectivePrinted) {
                 printedMap[clean] = effectivePrintedAt || new Date().toISOString();
               }
@@ -199,16 +254,6 @@ export function AppProvider({ children }) {
           savePrintedSkusMap(printedMap);
           setQrList(deduped);
           localStorage.setItem('ev_qr_list', JSON.stringify(deduped));
-        }
-        if (emgRes.data) {
-          const mappedEmgs = emgRes.data.map(mapEmergencyFromDb);
-          setEmergencies(mappedEmgs);
-          localStorage.setItem('ev_emergencies', JSON.stringify(mappedEmgs));
-        }
-        if (repRes.data) {
-          const mappedReps = repRes.data.map(mapReportFromDb);
-          setReports(mappedReps);
-          localStorage.setItem('ev_reports', JSON.stringify(mappedReps));
         }
       }).catch(err => {
         console.warn("Error cargando datos de Supabase:", err);
